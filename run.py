@@ -4,12 +4,7 @@ from utils.ch_train import ChConfig, ChRun
 from distutils.util import strtobool
 
 def main(args):
-    if args.dataset != 'sims':
-        EnRun(EnConfig(batch_size=args.batch_size,learning_rate=args.lr,seed=args.seed, model=args.model, tasks = args.tasks,
-                                    cme_version=args.cme_version, dataset_name=args.dataset,num_hidden_layers=args.num_hidden_layers,
-                                    context=args.context, text_context_len=args.text_context_len, audio_context_len=args.audio_context_len))
-    else:
-        ChRun(ChConfig(batch_size=args.batch_size,learning_rate=args.lr,seed=args.seed, model=args.model, tasks = args.tasks,
+    ChRun(ChConfig(batch_size=args.batch_size,learning_rate=args.lr,seed=args.seed, model=args.model, tasks = args.tasks,
                                     cme_version=args.cme_version, num_hidden_layers=args.num_hidden_layers))
 
 if __name__ == "__main__":

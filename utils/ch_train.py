@@ -75,8 +75,6 @@ class ChTrainer():
         optimizer = torch.optim.AdamW(model.parameters(),lr=self.config.learning_rate)
         train_loss = {
             'M':0,
-            'T':0,
-            'A':0
         }
         total_loss = 0
         input_size = 0
@@ -93,11 +91,16 @@ class ChTrainer():
             outputs = model(text_inputs, text_mask, audio_inputs, audio_mask) 
             
             # Compute the training loss.
-            loss = 0.0         
+            loss = 0.0       
+                   
+                          
             for m in self.tasks:
+                print(targets)
                 sub_loss = self.config.loss_weights[m] * self.criterion(outputs[m], targets[m].to(device).view(-1, 1))
                 loss += sub_loss
+                break # 因为数据集没有audio 和 text 的label 所以这里只能先break
 #                 train_loss[m] += sub_loss.item()*text_inputs.size(0)
+
             total_loss += loss.item()*text_inputs.size(0)
             input_size += text_inputs.size(0)
 
@@ -114,13 +117,11 @@ class ChTrainer():
     def do_test(self, model, data_loader, mode):    
 
         model.eval()                                # Put the model in training mode.              
-        y_pred = {'M': [], 'T': [], 'A': []}
-        y_true = {'M': [], 'T': [], 'A': []}
+        y_pred = {'M': []}
+        y_true = {'M': []}
         total_loss = 0
         val_loss = {
             'M':0,
-            'T':0,
-            'A':0
         }
         input_size = 0
         with torch.no_grad():
@@ -140,6 +141,7 @@ class ChTrainer():
                     sub_loss = self.config.loss_weights[m] * self.criterion(outputs[m], targets[m].to(device).view(-1, 1))
                     loss += sub_loss
                     val_loss[m] += sub_loss.item()*text_inputs.size(0)
+                    break # 因为数据集没有audio 和 text 的label 所以这里只能先break
                 total_loss += loss.item()*text_inputs.size(0)
                 input_size += text_inputs.size(0)
                 
@@ -148,11 +150,13 @@ class ChTrainer():
                 for m in self.tasks:
                     y_pred[m].append(outputs[m].cpu())
                     y_true[m].append(targets[m].cpu())
+                    break # 因为数据集没有audio 和 text 的label 所以这里只能先break
                 
         for m in self.tasks:
             val_loss[m] = round(val_loss[m] / input_size, 4)
+            break # 因为数据集没有audio 和 text 的label 所以这里只能先break
         total_loss = round(total_loss / input_size, 4)
-        print(mode+" >> loss: ",total_loss, "   M_loss: ", val_loss['M'], "  T_loss: ", val_loss['T'], "  A_loss: ", val_loss['A'])
+        print(mode+" >> loss: ",total_loss, "   M_loss: ", val_loss['M'])
 
         eval_results = {}
         for m in self.tasks:
@@ -160,6 +164,7 @@ class ChTrainer():
             results = self.metrics(pred, true)
             print('%s: >> ' %(m) + dict_to_str(results))
             eval_results[m] = results
+            break # 因为数据集没有audio 和 text 的label 所以这里只能先break
         eval_results = eval_results[self.tasks[0]]
         eval_results['Loss'] = total_loss
         

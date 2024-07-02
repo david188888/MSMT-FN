@@ -25,6 +25,9 @@ class Dataset_sims(torch.utils.data.Dataset):
         self.targets_T = df['label_T']
         self.targets_A = df['label_A']
         
+
+        
+        
         # store texts
         self.texts = df['text']
         self.tokenizer = AutoTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
@@ -194,6 +197,75 @@ class Dataset_mosi(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.targets_M)
     
+
+
+class Dataset_audio_text(torch.utils.data.Dataset):
+    # Argument List
+    #  csv_path: path to the csv file
+    #  audio_directory: path to the audio files
+    #  mode: train, test, valid
+    #  text_context_length
+    #  audio_context_length
+    
+    def __init__(self, csv_path, audio_directory, mode, text_context_length=2, audio_context_length=1):
+        df = pd.read_csv(csv_path)
+        df = df[df['mode']==mode].reset_index()
+        
+        # store the label and text
+        self.targets = df['label']
+        self.texts = df['text']
+        self.tokenizer = AutoTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
+        
+        # store the audio
+        self.audio_file_paths = []
+        for i in range(0,len(df)):
+            file_name = str(df['audio_id'][i])+'.wav'
+            file_path = audio_directory + "/" + file_name
+            self.audio_file_paths.append(file_path)
+        self.feature_extractor = Wav2Vec2FeatureExtractor(feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=True)
+        
+        
+        self.audio_id = df['audio_id']
+        
+        
+    def __getitem__(self, index):
+        #extract text features
+        text = str(self.texts[index])
+        
+
+        #tokenize text
+        tokenized_text = self.tokenizer(
+            text,            
+            max_length = 96,                                
+            padding = "max_length",     # Pad to the specified max_length. 
+            truncation = True,          # Truncate to the specified max_length. 
+            add_special_tokens = True,  # Whether to insert [CLS], [SEP], <s>, etc.   
+            return_attention_mask = True            
+        )
+
+        #load audio
+        sound,_ = torchaudio.load(self.audio_file_paths[index])
+        soundData = torch.mean(sound, dim=0, keepdim=False)
+        
+        #extract audio features
+        features = self.feature_extractor(soundData, sampling_rate=16000, max_length=96000,return_attention_mask=True,truncation=True, padding="max_length")
+        audio_features = torch.tensor(np.array(features['input_values']), dtype=torch.float32).squeeze()
+        audio_masks = torch.tensor(np.array(features['attention_mask']), dtype=torch.long).squeeze()
+        
+        return { # text
+                "text_tokens": (tokenized_text["input_ids"]),
+                "text_masks":(tokenized_text["attention_mask"]),
+                # audio
+                "audio_inputs": audio_features,
+                "audio_masks": audio_masks,
+                 # labels
+                "target": {
+                    "M": self.targets[index]
+                }
+                }
+        
+    def __len__(self):
+        return len(self.targets)
     
 def collate_fn_sims(batch):   
     text_tokens = []  
@@ -215,9 +287,8 @@ def collate_fn_sims(batch):
         audio_masks.append(batch[i]['audio_masks'])
 
        # labels
-        targets_M.append(batch[i]['target']['M'])
-        targets_T.append(batch[i]['target']['T'])
-        targets_A.append(batch[i]['target']['A'])        
+        targets_M.append(batch[i]['target']['M'])   
+
        
     return {
             # text
@@ -229,43 +300,17 @@ def collate_fn_sims(batch):
             # labels
             "targets": {
                     "M": torch.tensor(targets_M, dtype=torch.float32),
-                    "T": torch.tensor(targets_T, dtype=torch.float32),
-                    "A": torch.tensor(targets_A, dtype=torch.float32)
                 }
             }   
 
 
 def data_loader(batch_size, dataset, text_context_length=2, audio_context_length=1):
-    if dataset == 'mosi':
-        csv_path = 'data/MOSI/label.csv'
-        audio_file_path = "data/MOSI/wav"
-        train_data = Dataset_mosi(csv_path, audio_file_path, 'train', text_context_length=text_context_length, audio_context_length=audio_context_length)
-        test_data = Dataset_mosi(csv_path, audio_file_path, 'test', text_context_length=text_context_length, audio_context_length=audio_context_length)
-        val_data = Dataset_mosi(csv_path, audio_file_path, 'valid', text_context_length=text_context_length, audio_context_length=audio_context_length)
-        
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
-        val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
-        return train_loader, test_loader, val_loader
-    elif dataset == 'mosei':
-        csv_path = 'data/MOSEI/label.csv'
-        audio_file_path = "data/MOSEI/wav"
-        train_data = Dataset_mosi(csv_path, audio_file_path, 'train', text_context_length=text_context_length, audio_context_length=audio_context_length)
-        test_data = Dataset_mosi(csv_path, audio_file_path, 'test', text_context_length=text_context_length, audio_context_length=audio_context_length)
-        val_data = Dataset_mosi(csv_path, audio_file_path, 'valid', text_context_length=text_context_length, audio_context_length=audio_context_length)
-        
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
-        val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
-        return train_loader, test_loader, val_loader
-    else:
-        csv_path = 'data/SIMS/label.csv'
-        audio_file_path = "data/SIMS/wav"
-        train_data = Dataset_sims(csv_path, audio_file_path, 'train')
-        test_data = Dataset_sims(csv_path, audio_file_path, 'test')
-        val_data = Dataset_sims(csv_path, audio_file_path, 'valid')
-        
-        train_loader = DataLoader(train_data, batch_size=batch_size, collate_fn=collate_fn_sims, shuffle=True)
-        test_loader = DataLoader(test_data, batch_size=batch_size, collate_fn=collate_fn_sims, shuffle=False)
-        val_loader = DataLoader(val_data, batch_size=batch_size, collate_fn=collate_fn_sims, shuffle=False)
-        return train_loader, test_loader, val_loader
+    csv_path = 'data/label.csv'
+    audio_file_path = "data/audio"
+    train_data = Dataset_audio_text(csv_path, audio_file_path, 'train')
+    test_data = Dataset_audio_text(csv_path, audio_file_path, 'test')
+    val_data = Dataset_audio_text(csv_path, audio_file_path, 'valid')
+    train_loader = DataLoader(train_data, batch_size=batch_size, collate_fn=collate_fn_sims, shuffle=True)
+    test_loader = DataLoader(test_data, batch_size=batch_size, collate_fn=collate_fn_sims, shuffle=False)
+    val_loader = DataLoader(val_data, batch_size=batch_size, collate_fn=collate_fn_sims, shuffle=False)
+    return train_loader, test_loader, val_loader
