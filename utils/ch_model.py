@@ -187,6 +187,7 @@ class rob_hub_cme(nn.Module):
             truncated_feature = torch.mean(A_hidden_states[batch][:padding_idx],0) #Shape is [768]
             A_features.append(truncated_feature)
         A_features = torch.stack(A_features,0).to(device)
+        
         ## create new audio mask
         audio_mask_new = torch.zeros(A_hidden_states.shape[0], A_hidden_states.shape[1]).to(device)
         for batch in range(audio_mask_new.shape[0]):
