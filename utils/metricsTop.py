@@ -134,16 +134,18 @@ class MetricsTop():
         test_truth = np.clip(test_truth, a_min=-1., a_max=1.)
 
         # two classes{[-1.0, 0.0], (0.0, 1.0]}
-        ms_2 = [-1.01, 0.0, 1.01]
+        ms_2 = [-0.01, 0.5, 1.01]
         test_preds_a2 = test_preds.copy()
         test_truth_a2 = test_truth.copy()
         for i in range(2):
             test_preds_a2[np.logical_and(test_preds > ms_2[i], test_preds <= ms_2[i+1])] = i
         for i in range(2):
             test_truth_a2[np.logical_and(test_truth > ms_2[i], test_truth <= ms_2[i+1])] = i
+        test_preds_a2 = np.round(test_preds_a2)
+        test_truth_a2 = np.round(test_truth_a2)
 
         # three classes{[-1.0, -0.1], (-0.1, 0.1], (0.1, 1.0]}
-        ms_3 = [-1.01, -0.1, 0.1, 1.01]
+        ms_3 = [-0.01, 0.4, 0.7, 1.01]
         test_preds_a3 = test_preds.copy()
         test_truth_a3 = test_truth.copy()
         for i in range(3):
@@ -152,7 +154,7 @@ class MetricsTop():
             test_truth_a3[np.logical_and(test_truth > ms_3[i], test_truth <= ms_3[i+1])] = i
         
         # five classes{[-1.0, -0.7], (-0.7, -0.1], (-0.1, 0.1], (0.1, 0.7], (0.7, 1.0]}
-        ms_5 = [-1.01, -0.7, -0.1, 0.1, 0.7, 1.01]
+        ms_5 = [-0.01, 0.2, 0.4, 0.6, 0.8, 1.01]
         test_preds_a5 = test_preds.copy()
         test_truth_a5 = test_truth.copy()
         for i in range(5):

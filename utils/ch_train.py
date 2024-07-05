@@ -7,6 +7,23 @@ from utils.ch_model import rob_hub_cc, rob_hub_cme
 import random
 import numpy as np
 from utils.data_loader import data_loader
+from torch.utils.tensorboard import SummaryWriter
+
+
+
+from datetime import datetime
+TIMESTAMP = "{0:%Y-%m-%dT%H-%M-%S/}".format(datetime.now())
+...
+train_log_dir = 'logs/train/' + TIMESTAMP
+test_log_dir = 'logs/test/'   + TIMESTAMP
+val_log_dir = 'logs/val/' + TIMESTAMP
+
+
+# writer_train = SummaryWriter(train_log_dir)
+# writer_val = SummaryWriter(val_log_dir)
+
+# writer_test = SummaryWriter(test_log_dir)
+
 
 # global variable
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -34,14 +51,14 @@ class ChConfig(object):
                  },
                  model_save_path='checkpoint/',
                  learning_rate=1e-5,
-                 epochs=20,
+                 epochs=100,
                  dataset_name='sims',
                  early_stop=8,
                  seed=0,
                  dropout=0.3,
                  model='cme',
                  audio_feature='raw',
-                 batch_size=64,
+                 batch_size=32,
                  cme_version='v1',
                  tasks='MTA',
                  num_hidden_layers=3
@@ -113,6 +130,9 @@ class ChTrainer():
 #             train_loss[m] = round(train_loss[m] / len(data_loader.dataset), 4)
         total_loss = round(total_loss / input_size, 4)
 #         print('TRAIN'+" >> loss: ",total_loss, "   M_loss: ", train_loss['M'], "  T_loss: ", train_loss['T'], "  A_loss: ", train_loss['A'])
+
+        # writer_train.add_scalar('Loss/Train', total_loss, self.config.epochs)
+        
         return total_loss
 
     def do_test(self, model, data_loader, mode):
@@ -167,6 +187,23 @@ class ChTrainer():
 
         eval_results = eval_results[self.tasks[0]]
         eval_results['Loss'] = total_loss
+        
+        # if mode == "VAL":
+        #             writer_val.add_scalar('Loss/'+mode, total_loss, self.config.epochs)
+        #             writer_val.add_scalar('Acc2/'+mode, eval_results['Mult_acc_2'], self.config.epochs)
+        #             writer_val.add_scalar('F1/'+mode, eval_results['F1_score'], self.config.epochs)
+        #             writer_val.add_scalar('ACC3/'+mode, eval_results['Mult_acc_3'], self.config.epochs)
+        #             writer_val.add_scalar('MAE/'+mode, eval_results['MAE'], self.config.epochs)
+        #             writer_val.add_scalar('Corr/'+mode, eval_results['Corr'], self.config.epochs)
+                    
+        # elif mode == "TEST":
+        #             writer_test.add_scalar('Loss/'+mode, total_loss, self.config.epochs)
+        #             writer_test.add_scalar('Acc2/'+mode, eval_results['Mult_acc_2'], self.config.epochs)
+        #             writer_test.add_scalar('F1/'+mode, eval_results['F1_score'], self.config.epochs)
+        #             writer_test.add_scalar('ACC3/'+mode, eval_results['Mult_acc_3'], self.config.epochs)
+        #             writer_test.add_scalar('MAE/'+mode, eval_results['MAE'], self.config.epochs)
+        #             writer_test.add_scalar('Corr/'+mode, eval_results['Corr'], self.config.epochs)
+        
 
         return eval_results
 
@@ -179,7 +216,7 @@ def ChRun(config):
     torch.backends.cudnn.deterministic = True
 
     train_loader, test_loader, val_loader = data_loader(
-        config.batch_size, config.dataset_name)
+        config.batch_size)
 
     if config.model == 'cc':
         model = rob_hub_cc(config).to(device)
@@ -218,3 +255,7 @@ def ChRun(config):
     test_results_acc = trainer.do_test(model, test_loader, "TEST")
     print('%s: >> ' % ('TEST (lowest val loss) ') +
           dict_to_str(test_results_acc))
+    
+
+    # writer_test.close()
+    # writer_val.close()
