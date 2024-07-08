@@ -13,10 +13,9 @@ from torch.utils.tensorboard import SummaryWriter
 
 from datetime import datetime
 TIMESTAMP = "{0:%Y-%m-%dT%H-%M-%S/}".format(datetime.now())
-...
-train_log_dir = 'logs/train/' + TIMESTAMP
-test_log_dir = 'logs/test/'   + TIMESTAMP
-val_log_dir = 'logs/val/' + TIMESTAMP
+train_log_dir = 'logs/origin2/train/' + TIMESTAMP
+test_log_dir = 'logs/origin2/test/'   + TIMESTAMP
+val_log_dir = 'logs/origin2/val/' + TIMESTAMP
 
 
 writer_train = SummaryWriter(train_log_dir)
@@ -25,7 +24,7 @@ writer_test = SummaryWriter(test_log_dir)
 
 
 # global variable
-device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def dict_to_str(src_dict):
@@ -50,7 +49,7 @@ class ChConfig(object):
                  },
                  model_save_path='checkpoint/',
                  learning_rate=1e-5,
-                 epochs=50,
+                 epochs=2,
                  dataset_name='sims',
                  early_stop=8,
                  seed=0,
@@ -125,12 +124,57 @@ class ChTrainer():
             loss.backward()
             optimizer.step()
 
+    # def do_train(self, model, data_loader):
+    #     model.train()
+    #     optimizer = torch.optim.AdamW(
+    #         model.parameters(), lr=self.config.learning_rate)
+    #     train_loss = {
+    #         'M': 0,
+    #     }
+    #     total_loss = 0
+    #     input_size = 0
+    #     accumulation_steps = 2  # 每两个 batch 进行一次反向传播
+    #     # Loop over all batches.
+    #     for i, batch in enumerate(tqdm(data_loader)):
+    #         text_inputs = batch["text_tokens"].to(device)
+    #         audio_inputs = batch["audio_inputs"].to(device)
+    #         text_mask = batch["text_masks"].to(device)
+    #         audio_mask = batch["audio_masks"].to(device)
+    #         targets = batch["targets"]
+
+    #         # To zero out the gradients.
+    #         if i % accumulation_steps == 0:
+    #             optimizer.zero_grad()
+
+    #         outputs = model(text_inputs, text_mask, audio_inputs, audio_mask)
+
+    #         # Compute the training loss.
+    #         loss = 0.0
+
+    #         m = self.tasks[0]
+    #         sub_loss = self.config.loss_weights[m] * self.criterion(
+    #             outputs[m], targets[m].to(device).view(-1, 1))
+    #         loss += sub_loss / accumulation_steps  # 累积损失
+
+    #         total_loss += loss.item() * text_inputs.size(0)
+    #         input_size += text_inputs.size(0)
+
+    #         loss.backward()
+
+    #         # 每 accumulation_steps 次执行一次优化步骤
+    #         if (i + 1) % accumulation_steps == 0:
+    #             optimizer.step()
+    #             torch.cuda.empty_cache()
+
+    #     # 如果总batch数不是accumulation_steps的整数倍，处理剩余的梯度
+    #     if input_size % accumulation_steps != 0:
+    #         optimizer.step()
+    #         torch.cuda.empty_cache()
+
 #         for m in self.tasks:
 #             train_loss[m] = round(train_loss[m] / len(data_loader.dataset), 4)
         total_loss = round(total_loss / input_size, 4)
 #         print('TRAIN'+" >> loss: ",total_loss, "   M_loss: ", train_loss['M'], "  T_loss: ", train_loss['T'], "  A_loss: ", train_loss['A'])
-
-        writer_train.add_scalar('Loss/Train', total_loss, self.config.epochs)
         
         return total_loss
 
@@ -187,23 +231,7 @@ class ChTrainer():
         eval_results = eval_results[self.tasks[0]]
         eval_results['Loss'] = total_loss
         
-        if mode == "VAL":
-                    writer_val.add_scalar('Loss/'+mode, total_loss, self.config.epochs)
-                    writer_val.add_scalar('Acc2/'+mode, eval_results['Mult_acc_2'], self.config.epochs)
-                    writer_val.add_scalar('F1/'+mode, eval_results['F1_score'], self.config.epochs)
-                    writer_val.add_scalar('ACC3/'+mode, eval_results['Mult_acc_3'], self.config.epochs)
-                    writer_val.add_scalar('MAE/'+mode, eval_results['MAE'], self.config.epochs)
-                    writer_val.add_scalar('Corr/'+mode, eval_results['Corr'], self.config.epochs)
-                    
-        elif mode == "TEST":
-                    writer_test.add_scalar('Loss/'+mode, total_loss, self.config.epochs)
-                    writer_test.add_scalar('Acc2/'+mode, eval_results['Mult_acc_2'], self.config.epochs)
-                    writer_test.add_scalar('F1/'+mode, eval_results['F1_score'], self.config.epochs)
-                    writer_test.add_scalar('ACC3/'+mode, eval_results['Mult_acc_3'], self.config.epochs)
-                    writer_test.add_scalar('MAE/'+mode, eval_results['MAE'], self.config.epochs)
-                    writer_test.add_scalar('Corr/'+mode, eval_results['Corr'], self.config.epochs)
-        
-
+                
         return eval_results
 
 
@@ -213,6 +241,7 @@ def ChRun(config):
     torch.cuda.manual_seed(config.seed)
     np.random.seed(config.seed)
     torch.backends.cudnn.deterministic = True
+    torch.cuda.empty_cache()
 
     train_loader, test_loader, val_loader = data_loader(
         config.batch_size)
@@ -233,8 +262,17 @@ def ChRun(config):
     while True:
         print('---------------------EPOCH: ', epoch, '--------------------')
         epoch += 1
-        trainer.do_train(model, train_loader)
+        total_loss_train = trainer.do_train(model, train_loader)
+        writer_train.add_scalar('Loss/TRAIN', total_loss_train, epoch)
         eval_results = trainer.do_test(model, val_loader, "VAL")
+        mode = "VAL"
+        total_loss_val = eval_results['Loss']
+        writer_val.add_scalar('Loss/'+mode, total_loss_val, epoch)
+        writer_val.add_scalar('Acc2/'+mode, eval_results['Mult_acc_2'], epoch)
+        writer_val.add_scalar('F1/'+mode, eval_results['F1_score'], epoch)
+        writer_val.add_scalar('ACC3/'+mode, eval_results['Mult_acc_3'], epoch)
+        writer_val.add_scalar('MAE/'+mode, eval_results['MAE'], epoch)
+        writer_val.add_scalar('Corr/'+mode, eval_results['Corr'], epoch)
 #         test_results = trainer.do_test(model, test_loader,"TEST")
         if eval_results['Loss'] < lowest_eval_loss:
             lowest_eval_loss = eval_results['Loss']
@@ -245,6 +283,9 @@ def ChRun(config):
             torch.save(model.state_dict(), config.model_save_path+'acc.pth')
         if epoch - best_epoch >= config.early_stop:
             break
+        
+        with open('results/origin/val_results2.txt', 'a') as f:
+            f.write('EPOCH: '+str(epoch)+'  '+dict_to_str(eval_results)+'\n')
     model.load_state_dict(torch.load(config.model_save_path+'acc.pth'))
     test_results_loss = trainer.do_test(model, test_loader, "TEST")
     print('%s: >> ' % ('TEST (highest val acc) ') +
@@ -252,16 +293,25 @@ def ChRun(config):
 
     model.load_state_dict(torch.load(config.model_save_path+'loss.pth'))
     test_results_acc = trainer.do_test(model, test_loader, "TEST")
+    mode = "TEST"
+    total_loss_test = test_results_acc['Loss']
+    writer_test.add_scalar('Loss/'+mode, total_loss_test, epoch)
+    writer_test.add_scalar('Acc2/'+mode, test_results_acc['Mult_acc_2'], epoch)
+    writer_test.add_scalar('F1/'+mode, test_results_acc['F1_score'], epoch)
+    writer_test.add_scalar('ACC3/'+mode, test_results_acc['Mult_acc_3'], epoch)
+    writer_test.add_scalar('MAE/'+mode, test_results_acc['MAE'], epoch)
+    writer_test.add_scalar('Corr/'+mode, test_results_acc['Corr'], epoch)
+    
     print('%s: >> ' % ('TEST (lowest val loss) ') +
           dict_to_str(test_results_acc))
     
     
-    # 将结果存进文件
-    with open('logs/'+TIMESTAMP+'results.txt', 'w') as f:
-        f.write('TEST (highest val acc) '+dict_to_str(test_results_loss)+'\n')
-        f.write('TEST (lowest val loss) '+dict_to_str(test_results_acc)+'\n')
+    # 将结果存进对应的文件
+    with open('results/origin/test_results2.txt', 'w+') as f:
+        f.write('TEST (highest val acc) ' + dict_to_str(test_results_loss) + '\n')
+        f.write('TEST (lowest val loss) ' + dict_to_str(test_results_acc) + '\n')
         
-    
-
+        
+    writer_train.close()
     writer_test.close()
     writer_val.close()
