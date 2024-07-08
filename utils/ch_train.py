@@ -19,14 +19,13 @@ test_log_dir = 'logs/test/'   + TIMESTAMP
 val_log_dir = 'logs/val/' + TIMESTAMP
 
 
-# writer_train = SummaryWriter(train_log_dir)
-# writer_val = SummaryWriter(val_log_dir)
-
-# writer_test = SummaryWriter(test_log_dir)
+writer_train = SummaryWriter(train_log_dir)
+writer_val = SummaryWriter(val_log_dir)
+writer_test = SummaryWriter(test_log_dir)
 
 
 # global variable
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
 
 
 def dict_to_str(src_dict):
@@ -51,14 +50,14 @@ class ChConfig(object):
                  },
                  model_save_path='checkpoint/',
                  learning_rate=1e-5,
-                 epochs=100,
+                 epochs=50,
                  dataset_name='sims',
                  early_stop=8,
                  seed=0,
                  dropout=0.3,
                  model='cme',
                  audio_feature='raw',
-                 batch_size=32,
+                 batch_size=4,
                  cme_version='v1',
                  tasks='MTA',
                  num_hidden_layers=3
@@ -131,7 +130,7 @@ class ChTrainer():
         total_loss = round(total_loss / input_size, 4)
 #         print('TRAIN'+" >> loss: ",total_loss, "   M_loss: ", train_loss['M'], "  T_loss: ", train_loss['T'], "  A_loss: ", train_loss['A'])
 
-        # writer_train.add_scalar('Loss/Train', total_loss, self.config.epochs)
+        writer_train.add_scalar('Loss/Train', total_loss, self.config.epochs)
         
         return total_loss
 
@@ -188,21 +187,21 @@ class ChTrainer():
         eval_results = eval_results[self.tasks[0]]
         eval_results['Loss'] = total_loss
         
-        # if mode == "VAL":
-        #             writer_val.add_scalar('Loss/'+mode, total_loss, self.config.epochs)
-        #             writer_val.add_scalar('Acc2/'+mode, eval_results['Mult_acc_2'], self.config.epochs)
-        #             writer_val.add_scalar('F1/'+mode, eval_results['F1_score'], self.config.epochs)
-        #             writer_val.add_scalar('ACC3/'+mode, eval_results['Mult_acc_3'], self.config.epochs)
-        #             writer_val.add_scalar('MAE/'+mode, eval_results['MAE'], self.config.epochs)
-        #             writer_val.add_scalar('Corr/'+mode, eval_results['Corr'], self.config.epochs)
+        if mode == "VAL":
+                    writer_val.add_scalar('Loss/'+mode, total_loss, self.config.epochs)
+                    writer_val.add_scalar('Acc2/'+mode, eval_results['Mult_acc_2'], self.config.epochs)
+                    writer_val.add_scalar('F1/'+mode, eval_results['F1_score'], self.config.epochs)
+                    writer_val.add_scalar('ACC3/'+mode, eval_results['Mult_acc_3'], self.config.epochs)
+                    writer_val.add_scalar('MAE/'+mode, eval_results['MAE'], self.config.epochs)
+                    writer_val.add_scalar('Corr/'+mode, eval_results['Corr'], self.config.epochs)
                     
-        # elif mode == "TEST":
-        #             writer_test.add_scalar('Loss/'+mode, total_loss, self.config.epochs)
-        #             writer_test.add_scalar('Acc2/'+mode, eval_results['Mult_acc_2'], self.config.epochs)
-        #             writer_test.add_scalar('F1/'+mode, eval_results['F1_score'], self.config.epochs)
-        #             writer_test.add_scalar('ACC3/'+mode, eval_results['Mult_acc_3'], self.config.epochs)
-        #             writer_test.add_scalar('MAE/'+mode, eval_results['MAE'], self.config.epochs)
-        #             writer_test.add_scalar('Corr/'+mode, eval_results['Corr'], self.config.epochs)
+        elif mode == "TEST":
+                    writer_test.add_scalar('Loss/'+mode, total_loss, self.config.epochs)
+                    writer_test.add_scalar('Acc2/'+mode, eval_results['Mult_acc_2'], self.config.epochs)
+                    writer_test.add_scalar('F1/'+mode, eval_results['F1_score'], self.config.epochs)
+                    writer_test.add_scalar('ACC3/'+mode, eval_results['Mult_acc_3'], self.config.epochs)
+                    writer_test.add_scalar('MAE/'+mode, eval_results['MAE'], self.config.epochs)
+                    writer_test.add_scalar('Corr/'+mode, eval_results['Corr'], self.config.epochs)
         
 
         return eval_results
@@ -256,6 +255,13 @@ def ChRun(config):
     print('%s: >> ' % ('TEST (lowest val loss) ') +
           dict_to_str(test_results_acc))
     
+    
+    # 将结果存进文件
+    with open('logs/'+TIMESTAMP+'results.txt', 'w') as f:
+        f.write('TEST (highest val acc) '+dict_to_str(test_results_loss)+'\n')
+        f.write('TEST (lowest val loss) '+dict_to_str(test_results_acc)+'\n')
+        
+    
 
-    # writer_test.close()
-    # writer_val.close()
+    writer_test.close()
+    writer_val.close()
