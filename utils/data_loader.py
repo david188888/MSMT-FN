@@ -86,7 +86,7 @@ class Dataset_audio_text(torch.utils.data.Dataset):
             feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=True
         )
 
-        self.augment = augment
+        self.augment = False
         self.num_augmentations = num_augmentations
 
         if self.augment:
