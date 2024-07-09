@@ -6,3 +6,5 @@
 # /data/SIMS/wav/*
 /data/*
 /checkpoint/*
+/temp
+/logs

@@ -41,7 +41,7 @@ class TemporalPitchAugmentation:
     def __init__(self):
         self.augment = Compose([
             TimeMask(min_band_part=0.1, max_band_part=0.5, p=0.5),
-            PitchShift(min_semitones=-4, max_semitones=4, p=0.5)
+            PitchShift(min_semitones=-2, max_semitones=2, p=0.5)
         ])
 
     def __call__(self, audio, sample_rate):
@@ -65,13 +65,19 @@ class AudioAugmentation:
         audio = self.shift_normalize_augmenter(audio, sample_rate)
         return audio
 
+import pandas as pd
+import numpy as np
+import torch
+import torchaudio
+from transformers import AutoTokenizer, Wav2Vec2FeatureExtractor
+
 class Dataset_audio_text(torch.utils.data.Dataset):
-    def __init__(self, csv_path, audio_directory, augment=False):
+    def __init__(self, csv_path, audio_directory, augment=False, num_augmentations=2):
         df = pd.read_csv(csv_path)
 
         # store the label and text
-        self.targets = df['label']
-        self.texts = df['text']
+        self.targets = list(df['label'])
+        self.texts = list(df['text'])
         self.tokenizer = AutoTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
 
         # store the audio
@@ -80,16 +86,58 @@ class Dataset_audio_text(torch.utils.data.Dataset):
             feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=True
         )
 
-        self.audio_id = df['audio_id']
         self.augment = augment
+        self.num_augmentations = num_augmentations
+
         if self.augment:
             self.gaussian_augment = GaussianAugmentation()
             self.temporal_pitch_augment = TemporalPitchAugmentation()
             self.audio_augment = AudioAugmentation()
 
+            # Create lists to store augmented data
+            self.augmented_texts = []
+            self.augmented_targets = []
+            self.augmented_audio_file_paths = []
+
+            # Perform exponential augmentation
+            for i in range(len(self.audio_file_paths)):
+                current_audio, _ = torchaudio.load(self.audio_file_paths[i])
+                current_audio = current_audio.numpy()
+                label = self.targets[i]
+                text = self.texts[i]
+
+                # Store the original data
+                self.augmented_texts.append(text)
+                self.augmented_targets.append(label)
+                self.augmented_audio_file_paths.append(self.audio_file_paths[i])
+
+                # Perform augmentations
+                for _ in range(self.num_augmentations):
+                    if label in [0, 0.9, 0.3, 0.7]:
+                        current_audio = self.gaussian_augment(current_audio, sample_rate=16000)
+                        current_audio = self.temporal_pitch_augment(current_audio, sample_rate=16000)
+                    elif label in [0.1]:
+                        current_audio = self.temporal_pitch_augment(current_audio, sample_rate=16000)
+                    
+                    current_audio = self.audio_augment(current_audio)
+
+                    # Convert to tensor and save to a temporary file
+                    temp_path = f"temp/aug_{i}_{_}.wav"
+                    torchaudio.save(temp_path, torch.tensor(current_audio), 16000)
+
+                    # Store the augmented data
+                    self.augmented_texts.append(text)
+                    self.augmented_targets.append(label)
+                    self.augmented_audio_file_paths.append(temp_path)
+
+        else:
+            self.augmented_texts = self.texts
+            self.augmented_targets = self.targets
+            self.augmented_audio_file_paths = self.audio_file_paths
+
     def __getitem__(self, index):
         # extract text features
-        text = str(self.texts[index])
+        text = str(self.augmented_texts[index])
 
         # tokenize text
         tokenized_text = self.tokenizer(
@@ -102,18 +150,11 @@ class Dataset_audio_text(torch.utils.data.Dataset):
         )
 
         # load audio
-        sound, _ = torchaudio.load(self.audio_file_paths[index])
+        sound, _ = torchaudio.load(self.augmented_audio_file_paths[index])
         
-        if self.augment:
-            label = self.targets[index]
-            if label in [0, 0.9,0.3, 0.7]:
-                sound = self.gaussian_augment(sound, sample_rate=16000)
-                sound = self.temporal_pitch_augment(sound, sample_rate=16000)
-            elif label in [0.1]:
-                sound = self.temporal_pitch_augment(sound, sample_rate=16000)
-            
-            # Apply the main augmentation class to all sounds
-            sound = self.audio_augment(sound)
+        # Convert tensor to numpy array
+        sound = sound.numpy()
+
         if isinstance(sound, np.ndarray):
             sound = torch.tensor(sound)
         # Convert multi-channel audio to single-channel
@@ -133,12 +174,13 @@ class Dataset_audio_text(torch.utils.data.Dataset):
             "audio_inputs": audio_features,
             "audio_masks": audio_masks,
             "target": {
-                "M": self.targets[index]
+                "M": self.augmented_targets[index]
             }
         }
 
     def __len__(self):
-        return len(self.targets)
+        return len(self.augmented_targets)
+
 
 def collate_fn_sims(batch):
     text_tokens = []

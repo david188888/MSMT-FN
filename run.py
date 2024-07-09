@@ -1,7 +1,19 @@
 import argparse
 from utils.en_train import EnConfig, EnRun
 from utils.ch_train import ChConfig, ChRun
-from distutils.util import strtobool
+
+
+from setuptools import setup
+import setuptools.command.install
+
+def strtobool(val):
+    val = val.lower()
+    if val in ('y', 'yes', 't', 'true', 'on', '1'):
+        return True
+    elif val in ('n', 'no', 'f', 'false', 'off', '0'):
+        return False
+    else:
+        raise ValueError(f"Invalid truth value: {val}")
 
 def main(args):
     ChRun(ChConfig(batch_size=args.batch_size,learning_rate=args.lr,seed=args.seed, model=args.model, tasks = args.tasks,
@@ -10,7 +22,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=1, help='random seed')
-    parser.add_argument('--batch_size', type=int, default=16, help='batch size')
+    parser.add_argument('--batch_size', type=int, default=24, help='batch size')
     parser.add_argument('--lr', type=float, default=5e-6, help='learning rate, recommended: 5e-6 for mosi, mosei, 1e-5 for sims')
     parser.add_argument('--model', type=str, default='cc', help='concatenate(cc) or cross-modality encoder(cme)')
     parser.add_argument('--cme_version', type=str, default='v1', help='version')
