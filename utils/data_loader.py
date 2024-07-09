@@ -31,7 +31,7 @@ class GaussianAugmentation:
     def __init__(self):
         self.augment = Compose([
             AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
-            # AddGaussianSNR(min_snr_db=5.0, max_snr_db=40.0, p=0.5)
+            AddGaussianSNR(min_snr_db=5.0, max_snr_db=40.0, p=0.5)
         ])
 
     def __call__(self, audio, sample_rate):
@@ -40,7 +40,7 @@ class GaussianAugmentation:
 class TemporalPitchAugmentation:
     def __init__(self):
         self.augment = Compose([
-            TimeMask(min_band_part=0.1, max_band_part=0.5, p=0.5),
+            TimeMask(min_band_part=0.1, max_band_part=0.1, p=0.5),
             PitchShift(min_semitones=-2, max_semitones=2, p=0.5)
         ])
 
@@ -48,17 +48,17 @@ class TemporalPitchAugmentation:
         return self.augment(samples=audio, sample_rate=sample_rate)
 
 class ShiftNormalizeAugmentation:
-    def __init__(self, min_shift=-0.5, max_shift=0.5):
+    def __init__(self, min_shift=-0.2, max_shift=0.2):
         self.augment = Compose([
             Shift(min_shift=min_shift, max_shift=max_shift, p=0.5),
-            # Normalize(p=0.5)
+            Normalize(p=0.5)
         ])
 
     def __call__(self, audio, sample_rate):
         return self.augment(samples=audio, sample_rate=sample_rate)
 
 class AudioAugmentation:
-    def __init__(self, min_shift=-0.5, max_shift=0.5):
+    def __init__(self, min_shift=-0.1, max_shift=0.1):
         self.shift_normalize_augmenter = ShiftNormalizeAugmentation(min_shift, max_shift)
 
     def __call__(self, audio, sample_rate=16000):
@@ -113,13 +113,13 @@ class Dataset_audio_text(torch.utils.data.Dataset):
 
                 # Perform augmentations
                 for _ in range(self.num_augmentations):
-                    if label in [0, 0.9, 0.3, 0.7]:
+                    labelx = np.random.rand(1)
+                    if labelx <0.3:
                         current_audio = self.gaussian_augment(current_audio, sample_rate=16000)
+                    elif labelx >0.3 and labelx < 0.7:
                         current_audio = self.temporal_pitch_augment(current_audio, sample_rate=16000)
-                    elif label in [0.1]:
-                        current_audio = self.temporal_pitch_augment(current_audio, sample_rate=16000)
-                    
-                    current_audio = self.audio_augment(current_audio)
+                    else:
+                        current_audio = self.audio_augment(current_audio)
 
                     # Convert to tensor and save to a temporary file
                     temp_path = f"temp/aug_{i}_{_}.wav"
@@ -222,13 +222,13 @@ def data_loader(batch_size):
     # data = Dataset_audio_text(csv_path, audio_file_path)
     # train_data, test_data, val_data = torch.utils.data.random_split(
     #     data, [int(0.8*len(data)), int(0.1*len(data)), len(data)-int(0.8*len(data))-int(0.1*len(data))])
-    train_label_path = 'data/Origin/trainlabel.csv'
-    test_label_path = 'data/Origin/testlabel.csv'
-    verify_label_path = 'data/Origin/verifylabel.csv'
+    train_label_path = 'data/Fusion/trainlabel.csv'
+    test_label_path = 'data/Fusion/testlabel.csv'
+    verify_label_path = 'data/Fusion/verifylabel.csv'
     
-    train_file_path = 'data/Origin/train'
-    test_file_path = 'data/Origin/test'
-    verify_file_path = 'data/Origin/verify'
+    train_file_path = 'data/Fusion/train'
+    test_file_path = 'data/Fusion/test'
+    verify_file_path = 'data/Fusion/verify'
     
     
     train_data = Dataset_audio_text(train_label_path, train_file_path, augment=True)
