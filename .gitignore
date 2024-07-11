@@ -7,4 +7,6 @@
 /data/*
 /checkpoint/*
 /temp
+/log
 /logs
+/Out
