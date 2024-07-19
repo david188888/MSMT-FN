@@ -128,56 +128,129 @@ class MetricsTop():
         return self.__eval_mosei_regression(y_pred, y_true)
 
     def __eval_sims_regression(self, y_pred, y_true):
-        test_preds = y_pred.view(-1).cpu().detach().numpy()
-        test_truth = y_true.view(-1).cpu().detach().numpy()
-        test_preds = np.clip(test_preds, a_min=-1., a_max=1.)
-        test_truth = np.clip(test_truth, a_min=-1., a_max=1.)
+    #     test_preds = y_pred.view(-1).cpu().detach().numpy()
+    #     test_truth = y_true.view(-1).cpu().detach().numpy()
+    #     test_preds = np.clip(test_preds, a_min=-1., a_max=1.)
+    #     test_truth = np.clip(test_truth, a_min=-1., a_max=1.)
 
-        # two classes{[-1.0, 0.0], (0.0, 1.0]}
-        ms_2 = [-0.01, 0.5, 1.01]
-        test_preds_a2 = test_preds.copy()
-        test_truth_a2 = test_truth.copy()
-        for i in range(2):
-            test_preds_a2[np.logical_and(test_preds > ms_2[i], test_preds <= ms_2[i+1])] = i
-        for i in range(2):
-            test_truth_a2[np.logical_and(test_truth > ms_2[i], test_truth <= ms_2[i+1])] = i
-        test_preds_a2 = np.round(test_preds_a2)
-        test_truth_a2 = np.round(test_truth_a2)
+    #     # two classes{[-1.0, 0.0], (0.0, 1.0]}
+    #     ms_2 = [0, 2, 4]
+    #     test_preds_a2 = test_preds.copy()
+    #     test_truth_a2 = test_truth.copy()
+    #     for i in range(2):
+    #         test_preds_a2[np.logical_and(test_preds > ms_2[i], test_preds <= ms_2[i+1])] = i
+    #     for i in range(2):
+    #         test_truth_a2[np.logical_and(test_truth > ms_2[i], test_truth <= ms_2[i+1])] = i
+    #     test_preds_a2 = np.round(test_preds_a2)
+    #     test_truth_a2 = np.round(test_truth_a2)
 
-        # three classes{[-1.0, -0.1], (-0.1, 0.1], (0.1, 1.0]}
-        ms_3 = [-0.01, 0.4, 0.7, 1.01]
-        test_preds_a3 = test_preds.copy()
-        test_truth_a3 = test_truth.copy()
-        for i in range(3):
-            test_preds_a3[np.logical_and(test_preds > ms_3[i], test_preds <= ms_3[i+1])] = i
-        for i in range(3):
-            test_truth_a3[np.logical_and(test_truth > ms_3[i], test_truth <= ms_3[i+1])] = i
+    #     # three classes{[-1.0, -0.1], (-0.1, 0.1], (0.1, 1.0]}
+    #     ms_3 = [0, 2, 3, 4]
+    #     test_preds_a3 = test_preds.copy()
+    #     test_truth_a3 = test_truth.copy()
+    #     for i in range(3):
+    #         test_preds_a3[np.logical_and(test_preds > ms_3[i], test_preds <= ms_3[i+1])] = i
+    #     for i in range(3):
+    #         test_truth_a3[np.logical_and(test_truth > ms_3[i], test_truth <= ms_3[i+1])] = i
         
-        # five classes{[-1.0, -0.7], (-0.7, -0.1], (-0.1, 0.1], (0.1, 0.7], (0.7, 1.0]}
-        ms_5 = [-0.01, 0.2, 0.4, 0.6, 0.8, 1.01]
-        test_preds_a5 = test_preds.copy()
-        test_truth_a5 = test_truth.copy()
-        for i in range(5):
-            test_preds_a5[np.logical_and(test_preds > ms_5[i], test_preds <= ms_5[i+1])] = i
-        for i in range(5):
-            test_truth_a5[np.logical_and(test_truth > ms_5[i], test_truth <= ms_5[i+1])] = i
- 
-        mae = np.mean(np.absolute(test_preds - test_truth)).astype(np.float64)   # Average L1 distance between preds and truths
-        corr = np.corrcoef(test_preds, test_truth)[0][1]
-        mult_a2 = self.__multiclass_acc(test_preds_a2, test_truth_a2)
-        mult_a3 = self.__multiclass_acc(test_preds_a3, test_truth_a3)
-        mult_a5 = self.__multiclass_acc(test_preds_a5, test_truth_a5)
-        f_score = f1_score(test_truth_a2, test_preds_a2, average='weighted')
+    #     # five classes{[-1.0, -0.7], (-0.7, -0.1], (-0.1, 0.1], (0.1, 0.7], (0.7, 1.0]}
+    #     ms_5 = [0, 1, 2, 3, 4, 5]
+    #     test_preds_a5 = test_preds.copy()
+    #     test_truth_a5 = test_truth.copy()
+    #     for i in range(5):
+    #         test_preds_a5[np.logical_and(test_preds > ms_5[i], test_preds <= ms_5[i+1])] = i
+    #     for i in range(5):
+    #         test_truth_a5[np.logical_and(test_truth > ms_5[i], test_truth <= ms_5[i+1])] = i
 
+    #     print(f"test_preds = {test_preds}")
+    #     print(f"test_truth = {test_truth}")
+    #     mae = np.mean(np.absolute(test_preds - test_truth)).astype(np.float64)   # Average L1 distance between preds and truths
+    #     corr = np.corrcoef(test_preds, test_truth)[0][1]
+    #     mult_a2 = self.__multiclass_acc(test_preds_a2, test_truth_a2)
+    #     mult_a3 = self.__multiclass_acc(test_preds_a3, test_truth_a3)
+    #     mult_a5 = self.__multiclass_acc(test_preds_a5, test_truth_a5)
+    #     f_score = f1_score(test_truth_a2, test_preds_a2, average='weighted')
+
+    #     eval_results = {
+    #         "Mult_acc_2": round(mult_a2, 4),
+    #         "Mult_acc_3": round(mult_a3, 4),
+    #         # "Mult_acc_5": round(mult_a5, 4),
+    #         "F1_score": round(f_score, 4),
+    #         "MAE": round(mae, 4),
+    #         "Corr": round(corr, 4), # Correlation Coefficient
+    #     }
+    #     return eval_results
+    
+        test_preds = y_pred.cpu().detach().numpy()
+        test_truth = y_true.cpu().detach().numpy()
+        
+        # print(test_preds)
+        # print('--------------')
+        # print(test_truth)
+        
+        test_preds_label = np.argmax(test_preds, axis=1)
+        test_truth_label = test_truth.flatten()
+        
+        # print(f"test_pred_label is {test_preds_label}")
+        # print(f"test_truth_label is {test_truth_label}")
+        
+        
+        mae = np.mean(np.absolute(test_preds_label - test_truth_label)).astype(np.float64)
+
+        # 计算相关系数
+        corr = np.corrcoef(test_preds_label, test_truth_label)[0][1]
+
+        # 计算多分类准确率
+        mult_a5 = self.__multiclass_acc(test_preds_label, test_truth_label)
+
+        # 计算 F1 分数
+        f_score = f1_score(test_truth_label, test_preds_label, average='weighted')
+            # 计算二分类准确度
+        test_truth_binary = (test_truth_label < 2).astype(int)  # A, B -> 1; C, D, E -> 0
+        test_preds_binary = (test_preds_label < 2).astype(int)
+        mult_a2 = accuracy_score(test_truth_binary, test_preds_binary)
+        
+        # 计算四分类准确度
+        def map_to_four_class(label):
+            if label == 3 or label == 4:
+                return 3
+            elif label == 0:
+                return 0
+            elif label == 1:
+                return 1
+            elif label == 2:
+                return 2
+        
+    # 计算三分类准确度
+        def map_to_three_class(label):
+            if label == 0:
+                return 0  # A -> 0
+            elif label == 1 or label == 2:
+                return 1  # B, C -> 1
+            elif label == 3 or label == 4:
+                return 2  # D, E -> 2
+        test_truth_four_class = np.array([map_to_four_class(label) for label in test_truth_label])
+        test_preds_four_class = np.array([map_to_four_class(label) for label in test_preds_label])
+        mult_a4 = accuracy_score(test_truth_four_class, test_preds_four_class)
+        
+        test_truth_three_class = np.array([map_to_three_class(label) for label in test_truth_label])
+        test_preds_three_class = np.array([map_to_three_class(label) for label in test_preds_label])
+        mult_a3 = accuracy_score(test_truth_three_class, test_preds_three_class)
+        
         eval_results = {
-            "Mult_acc_2": round(mult_a2, 4),
-            "Mult_acc_3": round(mult_a3, 4),
-            "Mult_acc_5": round(mult_a5, 4),
-            "F1_score": round(f_score, 4),
-            "MAE": round(mae, 4),
-            "Corr": round(corr, 4), # Correlation Coefficient
-        }
+                "Mult_acc_5": mult_a5,
+                "Mult_acc_2": mult_a2,
+                "Mult_acc_4": mult_a4,
+                "Mult_acc_3": mult_a3,
+                "F1_score": f_score,
+                "MAE": mae,
+                "Corr": corr # Correlation Coefficient
+            }
         return eval_results
+        
+        
+        
+    
     
     def getMetics(self, datasetName):
         return self.metrics_dict[datasetName.upper()]

@@ -1,0 +1,9 @@
+{
+  "batch_size": {"_type":"choice", "_value":[2, 5, 10, 16]},
+  "learning_rate": {"_type":"loguniform", "_value":[0.00001, 0.01]},
+  "lr_scheduler": {"_type":"choice", "_value": ["fixed", "exponentialLR", "cosineAnnealingLR","reduceLROnPlateau"]},
+  "num_hidden_layers": {"_type":"choice", "_value":[3, 4, 5, 6, 7]},
+  "epochs": {"_type":"choice", "_value":[10, 25, 50,100]},
+  "drop_out": {"_type":"uniform", "_value":[0.1, 0.5]},
+  "cme_version": {"_type":"choice", "_value":[ "v2", "v3"]}
+}

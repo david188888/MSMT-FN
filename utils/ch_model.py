@@ -3,6 +3,7 @@ from torch import nn
 from transformers import RobertaModel, HubertModel, AutoModel
 from utils.cross_attn_encoder import CMELayer, BertConfig
 # from positional_encodings.torch_encodings import PositionalEncodingPermute1D, Summer
+import torch.nn.functional as F
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -133,7 +134,7 @@ class rob_hub_cme(nn.Module):
                 nn.ReLU(),
                 nn.Linear(768, 512),
                 nn.ReLU(),
-                nn.Linear(512, 1)
+                nn.Linear(512, 5)
             )
         else:
             self.fused_output_layers = nn.Sequential(
@@ -142,7 +143,7 @@ class rob_hub_cme(nn.Module):
                 nn.ReLU(),
                 nn.Linear(768, 512),
                 nn.ReLU(),
-                nn.Linear(512, 1)
+                nn.Linear(512, 5)
             )
         
     def prepend_cls(self, inputs, masks, layer_name):
@@ -239,13 +240,17 @@ class rob_hub_cme(nn.Module):
             fused_hidden_states = torch.cat((text_mixed_features[:,0,:], audio_mixed_features[:,0,:]), dim=1) # Shape is [batch_size, 768*4]
 
         # last linear output layer
-        fused_output = self.fused_output_layers(fused_hidden_states) # Shape is [batch_size, 2]
+        fused_output = self.fused_output_layers(fused_hidden_states) # Shape is [batch_size, 5]
         
-        return {
-                'T': T_output, 
-                'A': A_output, 
-                'M': fused_output
-        }
+        
+        
+        return fused_output
+        
+        # return {
+        #         'T': T_output, 
+        #         'A': A_output, 
+        #         'M': fused_output
+        # }
     
 
 

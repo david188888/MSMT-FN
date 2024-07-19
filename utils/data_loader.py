@@ -4,7 +4,7 @@ import transformers
 import torchaudio
 # import audiomentations
 from audiomentations import *
-
+from sklearn.preprocessing import LabelEncoder
 from transformers import AutoTokenizer, Wav2Vec2FeatureExtractor
 from torch.utils.data import DataLoader
 
@@ -76,7 +76,8 @@ class Dataset_audio_text(torch.utils.data.Dataset):
         df = pd.read_csv(csv_path)
 
         # store the label and text
-        self.targets = list(df['label'])
+        encoder = LabelEncoder()
+        self.targets = encoder.fit_transform(list(df['label']))
         self.texts = list(df['text'])
         self.tokenizer = AutoTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
 
@@ -104,6 +105,7 @@ class Dataset_audio_text(torch.utils.data.Dataset):
                 current_audio, _ = torchaudio.load(self.audio_file_paths[i])
                 current_audio = current_audio.numpy()
                 label = self.targets[i]
+                
                 text = self.texts[i]
 
                 # Store the original data
@@ -142,12 +144,13 @@ class Dataset_audio_text(torch.utils.data.Dataset):
         # tokenize text
         tokenized_text = self.tokenizer(
             text,
-            max_length=96,
+            max_length=512,
             padding="max_length",
             truncation=True,
             add_special_tokens=True,
             return_attention_mask=True
         )
+        # print(tokenized_text)
 
         # load audio
         sound, _ = torchaudio.load(self.augmented_audio_file_paths[index])
@@ -210,9 +213,8 @@ def collate_fn_sims(batch):
         "audio_inputs": torch.stack(audio_inputs),
         "audio_masks": torch.stack(audio_masks),
         # labels
-        "targets": {
-            "M": torch.tensor(targets_M, dtype=torch.float32),
-        }
+        "targets": 
+            torch.tensor(targets_M, dtype=torch.float32),
     }
 
 
@@ -222,13 +224,13 @@ def data_loader(batch_size):
     # data = Dataset_audio_text(csv_path, audio_file_path)
     # train_data, test_data, val_data = torch.utils.data.random_split(
     #     data, [int(0.8*len(data)), int(0.1*len(data)), len(data)-int(0.8*len(data))-int(0.1*len(data))])
-    train_label_path = 'data/Fusion/trainlabel.csv'
-    test_label_path = 'data/Fusion/testlabel.csv'
-    verify_label_path = 'data/Fusion/verifylabel.csv'
+    train_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/trainlabel.csv'
+    test_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/testlabel.csv'
+    verify_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/verifylabel.csv'
     
-    train_file_path = 'data/Fusion/train'
-    test_file_path = 'data/Fusion/test'
-    verify_file_path = 'data/Fusion/verify'
+    train_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/train'
+    test_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/test'
+    verify_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/verify'
     
     
     train_data = Dataset_audio_text(train_label_path, train_file_path, augment=True)
