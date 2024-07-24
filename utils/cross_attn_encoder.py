@@ -1,11 +1,16 @@
 import torch
 from torch import nn
 import math
+import sys
+import torch.nn.functional as F
 
 class BertConfig(object):
     """Configuration class to store the configuration of a `BertModel`.
     """
+
     def __init__(self,
+                 use_bottleneck=True,
+                n_bottlenecks=4,
                  hidden_size=768,
                  num_hidden_layers=3,
                  num_attention_heads=12,
@@ -14,8 +19,8 @@ class BertConfig(object):
                  hidden_dropout_prob=0.3,
                  attention_probs_dropout_prob=0.3,
                  max_position_embeddings=512,
-                 add_abs_pos_emb = False,
-                 add_pos_enc = False):
+                 add_abs_pos_emb=False,
+                 add_pos_enc=False):
         """Constructs BertConfig.
         Args:
             hidden_size: Size of the encoder layers and the pooler layer.
@@ -36,7 +41,8 @@ class BertConfig(object):
             add_abs_pos_emb: absolute positional embeddings
             add_pos_enc: positional encoding
         """
-
+        self.use_bottleneck = use_bottleneck
+        self.n_bottlenecks = n_bottlenecks
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -48,7 +54,9 @@ class BertConfig(object):
         self.add_abs_pos_emb = add_abs_pos_emb
         self.add_pos_enc = add_pos_enc
 
+
 BertLayerNorm = torch.nn.LayerNorm
+
 
 def gelu(x):
     """Implementation of the gelu activation function.
@@ -65,6 +73,7 @@ class GeLU(nn.Module):
         0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
         Also see https://arxiv.org/abs/1606.08415
     """
+
     def __init__(self):
         super().__init__()
 
@@ -78,6 +87,7 @@ def swish(x):
 
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish}
 
+
 class BertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -86,26 +96,30 @@ class BertAttention(nn.Module):
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads))
         self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.use_bottleneck = config.use_bottleneck
+        self.n_bottlenecks = config.n_bottlenecks
+        self.attention_head_size = int(
+            config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
-        
+
         self.add_abs_pos_emb = config.add_abs_pos_emb
         if self.add_abs_pos_emb:
-            self.abs_pos_emb = nn.Parameter(torch.randn(512, self.attention_head_size))
+            self.abs_pos_emb = nn.Parameter(
+                torch.randn(512, self.attention_head_size))
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[
+            :-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)#(b, s,h, d) -> (b, h, s, d)
+        return x.permute(0, 2, 1, 3)  # (b, s,h, d) -> (b, h, s, d)
 
     def forward(self, hidden_states, context, attention_mask=None):
-        #print(context.size(),attention_mask.size())
+        # print(context.size(),attention_mask.size())
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(context)
         mixed_value_layer = self.value(context)
@@ -114,28 +128,36 @@ class BertAttention(nn.Module):
         key_layer = self.transpose_for_scores(mixed_key_layer)
         value_layer = self.transpose_for_scores(mixed_value_layer)
         if self.add_abs_pos_emb:
-            pos_emb = self.abs_pos_emb[0:context.size(1),:]
-            pos_emb_q = self.abs_pos_emb[0:hidden_states.size(1),:]
-            pos_emb_q = pos_emb_q.expand(query_layer.size(0), query_layer.size(1), -1, -1)
-        
+            pos_emb = self.abs_pos_emb[0:context.size(1), :]
+            pos_emb_q = self.abs_pos_emb[0:hidden_states.size(1), :]
+            pos_emb_q = pos_emb_q.expand(
+                query_layer.size(0), query_layer.size(1), -1, -1)
+
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2)) # shape is (b, h, s_q, s_k)
+        attention_scores = torch.matmul(
+            query_layer, key_layer.transpose(-1, -2))  # shape is (b, h, s_q, s_k)
         if self.add_abs_pos_emb:
-            attention_pos_scores = torch.matmul(query_layer+pos_emb_q, pos_emb.transpose(-1, -2))
-            attention_scores = (attention_scores+attention_pos_scores) / math.sqrt(self.attention_head_size)
+            attention_pos_scores = torch.matmul(
+                query_layer+pos_emb_q, pos_emb.transpose(-1, -2))
+            attention_scores = (
+                attention_scores+attention_pos_scores) / math.sqrt(self.attention_head_size)
         else:
-            attention_scores = attention_scores/ math.sqrt(self.attention_head_size)
-            
+            attention_scores = attention_scores / \
+                math.sqrt(self.attention_head_size)
+
         # Apply the attention mask
         if attention_mask is not None:
             attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-            attention_mask = attention_mask.expand((-1,attention_scores.size(1),attention_scores.size(2),-1))
-            attention_mask = attention_mask.masked_fill(attention_mask == 0, float('-inf'))
-            attention_mask = attention_mask.masked_fill(attention_mask == 1, 0.0)
-            #print(attention_mask.size())
-            #print(attention_scores.size())
+            attention_mask = attention_mask.expand(
+                (-1, attention_scores.size(1), attention_scores.size(2), -1))
+            attention_mask = attention_mask.masked_fill(
+                attention_mask == 0, float('-inf'))
+            attention_mask = attention_mask.masked_fill(
+                attention_mask == 1, 0.0)
+            # print(attention_mask.size())
+            # print(attention_scores.size())
             attention_scores = attention_scores + attention_mask
-            
+
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
@@ -143,9 +165,12 @@ class BertAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        context_layer = torch.matmul(attention_probs, value_layer) # shape is (b, h, s_q, d)
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous() # shape is (b, s_q, h, d)
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = torch.matmul(
+            attention_probs, value_layer)  # shape is (b, h, s_q, d)
+        context_layer = context_layer.permute(
+            0, 2, 1, 3).contiguous()  # shape is (b, s_q, h, d)
+        new_context_layer_shape = context_layer.size()[
+            :-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
         return context_layer
 
@@ -164,6 +189,78 @@ class BertAttOutput(nn.Module):
         return hidden_states
 
 
+class BottleneckFusion(nn.Module):
+    def __init__(self, config):
+        super(BottleneckFusion, self).__init__()
+        self.use_bottleneck = config.use_bottleneck
+        self.n_bottlenecks = 4
+        self.cross_attn = BertCrossattLayer(config)
+        self.output = BertAttOutput(config)
+        self.bottle = []
+        if self.use_bottleneck:
+            self.bottleneck = nn.Parameter(torch.randn(
+                1, self.n_bottlenecks, config.hidden_size) * 0.02)
+
+    def forward(self, lang_input,lang_attention_mask, audio_input, audio_attention_mask):
+
+        t_mod_lang = lang_input.size(1)
+        t_mod_audio = audio_input.size(1)
+
+        in_mod_lang = torch.cat([lang_input, self.bottleneck.expand(
+            lang_input.size(0), -1, -1)], dim=1)
+        # print(f"in_mod_lang: {in_mod_lang.size()}")
+        # print(f"lang_input: {lang_input.size()}")
+        # print(f"botteleneck_lang: {(self.bottleneck.expand(lang_input.size(0), -1, -1)).size()}")
+        
+        # print(f"audio_input: {audio_input.size()}")
+        # print(f"botteleneck_lang: {(self.bottleneck.expand(audio_input.size(0), -1, -1)).size()}")
+
+        
+        in_mod_audio = torch.cat([audio_input, self.bottleneck.expand(
+            audio_input.size(0), -1, -1)], dim=1)
+        # print(f"in_mod: {in_mod.size()}")
+       
+        if lang_attention_mask.size(1) < in_mod_lang.size(1):
+            pad_length = in_mod_lang.size(1) - lang_attention_mask.size(1)
+            new_attention_mask_lang = F.pad(lang_attention_mask, (0, pad_length), "constant", 0)
+        else:
+            new_attention_mask_lang = lang_attention_mask
+        
+        if audio_attention_mask.size(1) < in_mod_audio.size(1):
+            pad_length = in_mod_audio.size(1) - audio_attention_mask.size(1)
+            new_attention_mask_audio = F.pad(audio_attention_mask, (0, pad_length), "constant", 0)
+        else:
+            new_attention_mask_audio = audio_attention_mask
+
+        # print(f"new attention_mask: {new_attention_mask.size()}")
+        out_mod_lang = self.cross_attn(in_mod_lang,in_mod_audio,ctx_att_mask=new_attention_mask_audio)
+        out_mod_audio = self.cross_attn(in_mod_audio,in_mod_lang,ctx_att_mask=new_attention_mask_lang)
+        output_lang = self.output(out_mod_lang, in_mod_lang)
+        output_audio = self.output(out_mod_audio, in_mod_audio)
+        
+        input_out_lang = output_lang[:, :t_mod_lang]
+        input_out_audio = output_audio[:, :t_mod_audio]
+        # print(f"input_tensor_out: {input_tensor_out.size()}")
+        # print('----------')
+        # print(out_mod.size())
+        # print('-------------')
+        updated_bottleneck_lang = input_out_lang[:, t_mod_lang:]
+        updated_bottleneck_audio = input_out_audio[:, t_mod_audio:]
+
+        print(updated_bottleneck_audio)
+        
+        self.bottle.append(updated_bottleneck_lang)
+        self.bottle.append(updated_bottleneck_audio)
+        # print(f"self.bottle[0] shape: {self.bottle[0].size()}")
+        stacked_bottle = torch.stack(self.bottle, dim=1)
+        new_bottleneck = torch.mean(stacked_bottle, dim=1)
+        
+        # print(f"new_aftermean_bottleneck shape is {new_bottleneck.size()}")
+        self.bottleneck = nn.Parameter(new_bottleneck)
+
+        return input_out_lang
+
+
 class BertCrossattLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -173,7 +270,6 @@ class BertCrossattLayer(nn.Module):
     def forward(self, input_tensor, ctx_tensor, ctx_att_mask=None):
         output = self.att(input_tensor, ctx_tensor, ctx_att_mask)
         attention_output = self.output(output, input_tensor) # attention_output = self.output(output, input_tensor)
-
         return attention_output
 
 
@@ -185,8 +281,10 @@ class BertSelfattLayer(nn.Module):
 
     def forward(self, input_tensor, attention_mask):
         # Self attention attends to itself, thus keys and querys are the same (input_tensor).
+
         self_output = self.self(input_tensor, input_tensor, attention_mask)
         attention_output = self.output(self_output, input_tensor)
+
         return attention_output
 
 
@@ -240,13 +338,19 @@ class BertLayer(nn.Module):
 """
 
 
+
 class CMELayer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        
+        # The Bottleneck Fusion Layer
+        self.audio_bottleneck_fusion = BottleneckFusion(config)
+        self.lang_bottleneck_fusion = BottleneckFusion(config)
+        
         # The cross-attention Layer
         self.audio_attention = BertCrossattLayer(config)
         self.lang_attention = BertCrossattLayer(config)
-        
+
         # Self-attention Layers
         self.lang_self_att = BertSelfattLayer(config)
         self.audio_self_att = BertSelfattLayer(config)
@@ -256,17 +360,26 @@ class CMELayer(nn.Module):
         self.lang_output = BertOutput(config)
         self.audio_inter = BertIntermediate(config)
         self.audio_output = BertOutput(config)
-
+        
+        
+    def bottleneck_fusion(self, lang_input, audio_input,lang_attention_mask,audio_attention_mask):
+        audio_output = self.audio_bottleneck_fusion(audio_input,audio_attention_mask)
+        lang_output = self.lang_bottleneck_fusion(lang_input,lang_attention_mask)
+        return lang_output, audio_output
+    
     def cross_att(self, lang_input, lang_attention_mask, audio_input, audio_attention_mask):
         # Cross Attention
-        lang_att_output = self.lang_attention(lang_input, audio_input, ctx_att_mask=audio_attention_mask)
-        audio_att_output = self.audio_attention(audio_input, lang_input, ctx_att_mask=lang_attention_mask)
+        lang_att_output = self.lang_attention(
+            lang_input, audio_input, ctx_att_mask=audio_attention_mask)
+        audio_att_output = self.audio_attention(
+            audio_input, lang_input, ctx_att_mask=lang_attention_mask)
         return lang_att_output, audio_att_output
 
     def self_att(self, lang_input, lang_attention_mask, audio_input, audio_attention_mask):
         # Self Attention
         lang_att_output = self.lang_self_att(lang_input, lang_attention_mask)
-        audio_att_output = self.audio_self_att(audio_input, audio_attention_mask)
+        audio_att_output = self.audio_self_att(
+            audio_input, audio_attention_mask)
         return lang_att_output, audio_att_output
 
     def output_fc(self, lang_input, audio_input):
@@ -280,17 +393,19 @@ class CMELayer(nn.Module):
         return lang_output, audio_output
 
     def forward(self, lang_feats, lang_attention_mask,
-                      audio_feats, audio_attention_mask):
-        
+                audio_feats, audio_attention_mask):
+
         lang_att_output = lang_feats
         audio_att_output = audio_feats
-
-        lang_att_output, audio_att_output = self.cross_att(lang_att_output, lang_attention_mask,
-                                                          audio_att_output, audio_attention_mask)
-        lang_att_output, audio_att_output = self.self_att(lang_att_output, lang_attention_mask,
-                                                         audio_att_output, audio_attention_mask)
-        lang_output, audio_output = self.output_fc(lang_att_output, audio_att_output)
-        
-        return lang_output, audio_output
-
     
+        
+        lang_att_output = self.audio_bottleneck_fusion(lang_att_output, lang_attention_mask, audio_att_output, audio_attention_mask)
+        print("finish lang bottleneck")
+        # lang_att_output, audio_att_output = self.cross_att(lang_att_output, lang_attention_mask,
+        #                                                    audio_att_output, audio_attention_mask)
+        lang_att_output, audio_att_output = self.self_att(lang_att_output, lang_attention_mask,
+                                                          audio_att_output, audio_attention_mask)
+        lang_output, audio_output = self.output_fc(
+            lang_att_output, audio_att_output)
+
+        return lang_output, audio_output

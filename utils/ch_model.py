@@ -7,75 +7,10 @@ import torch.nn.functional as F
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-
-class rob_hub_cc(nn.Module):            
-    def __init__(self, config):        
-        super().__init__()
-        model_path="audio_model"
-        self.roberta_model = AutoModel.from_pretrained("hfl/chinese-roberta-wwm-ext")
-        self.hubert_model = AutoModel.from_pretrained('TencentGameMate/chinese-hubert-base')
-        
-        self.T_output_layers = nn.Sequential(
-            nn.Dropout(config.dropout),
-            nn.Linear(768, 1)
-           )           
-        self.A_output_layers = nn.Sequential(
-            nn.Dropout(config.dropout),
-            nn.Linear(768, 1)
-          )
-        self.fused_output_layers = nn.Sequential(
-            nn.Dropout(config.dropout),
-            nn.Linear(768*2, 768),
-            nn.ReLU(),
-            nn.Linear(768, 768),
-            nn.ReLU(),
-            nn.Linear(768, 512),
-            nn.ReLU(),
-            nn.Linear(512, 1)
-        )
-
-    def forward(self, text_inputs, text_mask, audio_inputs, audio_mask):
-        # text feature extraction
-        raw_output = self.roberta_model(text_inputs, text_mask, return_dict=True)
-        T_features = raw_output["pooler_output"]  # Shape is [batch_size, 768]
-
-        # audio feature extraction
-        audio_out = self.hubert_model(audio_inputs, audio_mask, output_attentions=True)
-        A_hidden_states = audio_out.last_hidden_state
-        ## average over unmasked audio tokens
-        A_features = []
-        audio_mask_idx_new = []
-        for batch in range(A_hidden_states.shape[0]):
-            layer = 0
-            while layer<12:
-                try:
-                    padding_idx = sum(audio_out.attentions[layer][batch][0][0]!=0)
-                    audio_mask_idx_new.append(padding_idx)
-                    break
-                except:
-                    layer += 1
-            truncated_feature = torch.mean(A_hidden_states[batch][:padding_idx],0) #Shape is [768]
-            A_features.append(truncated_feature)
-        A_features = torch.stack(A_features,0).to(device)
-             
-        T_output = self.T_output_layers(T_features)                    # Shape is [batch_size, 1]
-        A_output = self.A_output_layers(A_features)                    # Shape is [batch_size, 1]
-        
-        fused_features = torch.cat((T_features, A_features), dim=1)    # Shape is [batch_size, 768*2]
-        fused_output = self.fused_output_layers(fused_features)        # Shape is [batch_size, 1]
-
-        return {
-                'T': T_output, 
-                'A': A_output, 
-                'M': fused_output
-        }
-
-
     
 class rob_hub_cme(nn.Module):            
     def __init__(self, config):        
         super().__init__()
-        self.version = config.cme_version
 
         # load text pre-trained model
         self.roberta_model = AutoModel.from_pretrained("hfl/chinese-roberta-wwm-ext")
@@ -127,8 +62,7 @@ class rob_hub_cme(nn.Module):
         self.audio_encoder = nn.TransformerEncoder(encoder_layer, num_layers=2,enable_nested_tensor=False)
         
         # last linear output layer
-        if self.version == 'v3':
-            self.fused_output_layers = nn.Sequential(
+        self.fused_output_layers = nn.Sequential(
                 nn.Dropout(config.dropout),
                 nn.Linear(768*4, 768),
                 nn.ReLU(),
@@ -136,16 +70,6 @@ class rob_hub_cme(nn.Module):
                 nn.ReLU(),
                 nn.Linear(512, 5)
             )
-        else:
-            self.fused_output_layers = nn.Sequential(
-                nn.Dropout(config.dropout),
-                nn.Linear(768*2, 768),
-                nn.ReLU(),
-                nn.Linear(768, 512),
-                nn.ReLU(),
-                nn.Linear(512, 5)
-            )
-        
     def prepend_cls(self, inputs, masks, layer_name):
         if layer_name == 'text':
             embedding_layer = self.text_cls_emb
@@ -215,29 +139,15 @@ class rob_hub_cme(nn.Module):
         for layer_module in self.CME_layers:
             text_inputs, audio_inputs = layer_module(text_inputs, text_attn_mask,
                                                 audio_inputs, audio_attn_mask)
-        # different fusion methods
-        if self.version == 'v1':
-            # fused features
-            fused_hidden_states = torch.cat((text_inputs[:,0,:], audio_inputs[:,0,:]), dim=1) # Shape is [batch_size, 768*2]
-            # fused_hidden_states = torch.cat((torch.mean(text_inputs,dim=1), torch.mean(audio_inputs,dim=1)), dim=1) # Shape is [batch_size, 768*2]
-        elif self.version == 'v2':
             # concatenate original features with fused features
-            text_concat_features = torch.cat((T_features, text_inputs[:,0,:]), dim=1) # Shape is [batch_size, 768*2]
-            audio_concat_features = torch.cat((A_features, audio_inputs[:,0,:]), dim=1) # Shape is [batch_size, 768*2]
-            text_mixed_features = self.text_mixed_layer(text_concat_features) # Shape is [batch_size, 768]
-            audio_mixed_features = self.audio_mixed_layer(audio_concat_features) # Shape is [batch_size, 768]
-            # fused features
-            fused_hidden_states = torch.cat((text_mixed_features, audio_mixed_features), dim=1) # Shape is [batch_size, 768*2]
-        else:
-            # concatenate original features with fused features
-            text_concat_features = torch.cat((T_hidden_states, text_inputs[:,1:,:]), dim=2) # Shape is [batch_size, text_length, 768*2]
-            audio_concat_features = torch.cat((A_hidden_states, audio_inputs[:,1:,:]), dim=2) # Shape is [batch_size, audio_length, 768*2]
-            text_concat_features, text_attn_mask = self.prepend_cls(text_concat_features, text_mask, 'text_mixed') # add cls token
-            audio_concat_features, audio_attn_mask = self.prepend_cls(audio_concat_features, audio_mask_new, 'audio_mixed') # add cls token
-            text_mixed_features = self.text_encoder(text_concat_features, src_key_padding_mask=(1-text_attn_mask).bool())
-            audio_mixed_features = self.audio_encoder(audio_concat_features, src_key_padding_mask=(1-audio_attn_mask).bool())
-            # fused features
-            fused_hidden_states = torch.cat((text_mixed_features[:,0,:], audio_mixed_features[:,0,:]), dim=1) # Shape is [batch_size, 768*4]
+        text_concat_features = torch.cat((T_hidden_states, text_inputs[:,1:,:]), dim=2) # Shape is [batch_size, text_length, 768*2]
+        audio_concat_features = torch.cat((A_hidden_states, audio_inputs[:,1:,:]), dim=2) # Shape is [batch_size, audio_length, 768*2]
+        text_concat_features, text_attn_mask = self.prepend_cls(text_concat_features, text_mask, 'text_mixed') # add cls token
+        audio_concat_features, audio_attn_mask = self.prepend_cls(audio_concat_features, audio_mask_new, 'audio_mixed') # add cls token
+        text_mixed_features = self.text_encoder(text_concat_features, src_key_padding_mask=(1-text_attn_mask).bool())
+        audio_mixed_features = self.audio_encoder(audio_concat_features, src_key_padding_mask=(1-audio_attn_mask).bool())
+        # fused features
+        fused_hidden_states = torch.cat((text_mixed_features[:,0,:], audio_mixed_features[:,0,:]), dim=1) # Shape is [batch_size, 768*4]
 
         # last linear output layer
         fused_output = self.fused_output_layers(fused_hidden_states) # Shape is [batch_size, 5]
