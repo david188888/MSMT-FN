@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from transformers import RobertaModel, HubertModel, AutoModel
-from utils.cross_attn_encoder import CMELayer, BertConfig
+from utils.cross_attn_encoder import CMELayer, BertConfig, GRULayer, GruConfig
 # from positional_encodings.torch_encodings import PositionalEncodingPermute1D, Summer
 import torch.nn.functional as F
 
@@ -41,6 +41,11 @@ class rob_hub_cme(nn.Module):
         Bert_config = BertConfig(num_hidden_layers=config.num_hidden_layers)
         self.CME_layers = nn.ModuleList(
             [CMELayer(Bert_config) for _ in range(Bert_config.num_hidden_layers)]
+        )
+        
+        GRU_config = GruConfig(hidden_size=config.hidden_size, num_layers=config.num_layers)
+        self.GRU_layers = nn.ModuleList(
+            [GRULayer(GRU_config) for _ in range(GRU_config.num_layers)]
         )
 
         # fused method V2
@@ -140,6 +145,8 @@ class rob_hub_cme(nn.Module):
             text_inputs, audio_inputs = layer_module(text_inputs, text_attn_mask,
                                                 audio_inputs, audio_attn_mask)
             # concatenate original features with fused features
+            
+            
         text_concat_features = torch.cat((T_hidden_states, text_inputs[:,1:,:]), dim=2) # Shape is [batch_size, text_length, 768*2]
         audio_concat_features = torch.cat((A_hidden_states, audio_inputs[:,1:,:]), dim=2) # Shape is [batch_size, audio_length, 768*2]
         text_concat_features, text_attn_mask = self.prepend_cls(text_concat_features, text_mask, 'text_mixed') # add cls token
@@ -151,6 +158,8 @@ class rob_hub_cme(nn.Module):
 
         # last linear output layer
         fused_output = self.fused_output_layers(fused_hidden_states) # Shape is [batch_size, 5]
+        
+        # attention_output = self.GRU_layers(input_dim, seq_lengths, hidden)
         
         
         

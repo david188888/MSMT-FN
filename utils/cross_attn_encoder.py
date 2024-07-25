@@ -10,7 +10,7 @@ class BertConfig(object):
 
     def __init__(self,
                  use_bottleneck=True,
-                n_bottlenecks=4,
+                 n_bottlenecks=4,
                  hidden_size=768,
                  num_hidden_layers=3,
                  num_attention_heads=12,
@@ -54,6 +54,24 @@ class BertConfig(object):
         self.add_abs_pos_emb = add_abs_pos_emb
         self.add_pos_enc = add_pos_enc
 
+
+class GruConfig(object):
+    def __init__(self,
+                 input_dim=768,
+                 num_layers=2,
+                 bidirectional=True,
+                 num_heads = 12,
+                 dropout=0.3,
+                 hidden_size=512,
+                 output_size=300):
+        self.input_dim = input_dim
+        self.num_layers = num_layers
+        self.bidirectional = bidirectional
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.num_heads = num_heads
+        self.dropout = 0.3
+        
 
 BertLayerNorm = torch.nn.LayerNorm
 
@@ -237,25 +255,23 @@ class BottleneckFusion(nn.Module):
         out_mod_audio = self.cross_attn(in_mod_audio,in_mod_lang,ctx_att_mask=new_attention_mask_lang)
         output_lang = self.output(out_mod_lang, in_mod_lang)
         output_audio = self.output(out_mod_audio, in_mod_audio)
-        
+
         input_out_lang = output_lang[:, :t_mod_lang]
         input_out_audio = output_audio[:, :t_mod_audio]
         # print(f"input_tensor_out: {input_tensor_out.size()}")
         # print('----------')
         # print(out_mod.size())
         # print('-------------')
-        updated_bottleneck_lang = input_out_lang[:, t_mod_lang:]
-        updated_bottleneck_audio = input_out_audio[:, t_mod_audio:]
-
-        print(updated_bottleneck_audio)
+        updated_bottleneck_lang = output_lang[:, t_mod_lang:]
+        updated_bottleneck_audio = output_audio[:, t_mod_audio:]
         
         self.bottle.append(updated_bottleneck_lang)
         self.bottle.append(updated_bottleneck_audio)
-        # print(f"self.bottle[0] shape: {self.bottle[0].size()}")
-        stacked_bottle = torch.stack(self.bottle, dim=1)
-        new_bottleneck = torch.mean(stacked_bottle, dim=1)
+        print(f"self.bottle[0] shape: {self.bottle}")
+        stacked_bottle = torch.stack(self.bottle, dim=-1)
+        new_bottleneck = torch.mean(stacked_bottle, dim=-1)
         
-        # print(f"new_aftermean_bottleneck shape is {new_bottleneck.size()}")
+        print(f"new_aftermean_bottleneck shape is {new_bottleneck}")
         self.bottleneck = nn.Parameter(new_bottleneck)
 
         return input_out_lang
@@ -337,7 +353,33 @@ class BertLayer(nn.Module):
 ---------------------------------------------------------------------------------------
 """
 
-
+class GRU_context(nn.Module):
+    def __init__(self, config):
+        super(GRU_context, self).__init__()
+        self.input_dim = config.hidden_size
+        self.hidden_size = config.hidden_size
+        self.num_layers = config.num_layers
+        self.output_size = config.output_size
+        self.bidirectional = config.bidirectional
+        self.n_directions = 2 if self.bidirectional else 1
+        
+        self.gru = nn.GRU(input_size = self.input_dim, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first = True, bidirectional = self.bidirectional)
+        self.fc1 = nn.Linear(self.hidden_size*self.n_directions, 300)
+        self.fc2 = nn.Linear(300, self.output_size)
+        
+    def init_hidden(self, config):
+        hidden = torch.zeros(self.num_layers*self.n_directions, config.batch_size, self.hidden_size)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        return hidden.to(device)
+    
+    def forward(self, inputs, seq_lengths, hidden):
+        
+        gru_input = nn.utils.rnn.pack_padded_sequence(inputs, seq_lengths, batch_first=True)
+        output, hidden = self.gru(gru_input, hidden)
+                    
+        fc_output = self.fc1(output)
+        fc_output = self.fc2(output)
+        return fc_output
 
 class CMELayer(nn.Module):
     def __init__(self, config):
@@ -360,6 +402,7 @@ class CMELayer(nn.Module):
         self.lang_output = BertOutput(config)
         self.audio_inter = BertIntermediate(config)
         self.audio_output = BertOutput(config)
+
         
         
     def bottleneck_fusion(self, lang_input, audio_input,lang_attention_mask,audio_attention_mask):
@@ -391,6 +434,8 @@ class CMELayer(nn.Module):
         lang_output = self.lang_output(lang_inter_output, lang_input)
         audio_output = self.audio_output(audio_inter_output, audio_input)
         return lang_output, audio_output
+    
+
 
     def forward(self, lang_feats, lang_attention_mask,
                 audio_feats, audio_attention_mask):
@@ -400,6 +445,7 @@ class CMELayer(nn.Module):
     
         
         lang_att_output = self.audio_bottleneck_fusion(lang_att_output, lang_attention_mask, audio_att_output, audio_attention_mask)
+        audio_att_output = self.lang_bottleneck_fusion(audio_att_output, audio_attention_mask, lang_att_output, lang_attention_mask)
         print("finish lang bottleneck")
         # lang_att_output, audio_att_output = self.cross_att(lang_att_output, lang_attention_mask,
         #                                                    audio_att_output, audio_attention_mask)
@@ -409,3 +455,25 @@ class CMELayer(nn.Module):
             lang_att_output, audio_att_output)
 
         return lang_output, audio_output
+
+
+class GRULayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        
+        # The GRU Context Layer
+        self.gru = GRU_context(config)
+
+        # The MultiHead Attention Layer
+        self.multihead_att = nn.MultiheadAttention(config.input_dim, config.num_heads, config.dropout, batch_first=True)
+        
+        
+    def forward(self, input_dim, seq_lengths, hidden):
+        gru_output = self.gru(input_dim, seq_lengths, hidden)
+        
+        # Multihead Attention
+        attention_output, atteenion_weights = self.multihead_att(gru_output, gru_output, gru_output)
+        
+        return attention_output
+        
+    

@@ -61,7 +61,9 @@ class ChConfig(object):
                  cme_version='v3',
                  tasks='MTA',
                  num_hidden_layers=3,
-                 scheduler_type = 'fixed'
+                 scheduler_type = 'fixed',
+                 hidden_size = 50,
+                 num_layers = 2
                  ):
 
         self.train_mode = train_mode
@@ -80,6 +82,8 @@ class ChConfig(object):
         self.tasks = tasks
         self.num_hidden_layers = num_hidden_layers
         self.scheduler_type = scheduler_type
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
 
 
 class ChTrainer():
