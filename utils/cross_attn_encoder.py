@@ -55,22 +55,22 @@ class BertConfig(object):
         self.add_pos_enc = add_pos_enc
 
 
-class GruConfig(object):
-    def __init__(self,
-                 input_dim=768,
-                 num_layers=2,
-                 bidirectional=True,
-                 num_heads = 12,
-                 dropout=0.3,
-                 hidden_size=512,
-                 output_size=300):
-        self.input_dim = input_dim
-        self.num_layers = num_layers
-        self.bidirectional = bidirectional
-        self.hidden_size = hidden_size
-        self.output_size = output_size
-        self.num_heads = num_heads
-        self.dropout = 0.3
+# class GruConfig(object):
+#     def __init__(self,
+#                  input_dim=768,
+#                  num_layers=2,
+#                  bidirectional=True,
+#                  num_heads = 12,
+#                  dropout=0.3,
+#                  hidden_size=512,
+#                  output_size=300):
+#         self.input_dim = input_dim
+#         self.num_layers = num_layers
+#         self.bidirectional = bidirectional
+#         self.hidden_size = hidden_size
+#         self.output_size = output_size
+#         self.num_heads = num_heads
+#         self.dropout = 0.3
         
 
 BertLayerNorm = torch.nn.LayerNorm
@@ -267,11 +267,11 @@ class BottleneckFusion(nn.Module):
         
         self.bottle.append(updated_bottleneck_lang)
         self.bottle.append(updated_bottleneck_audio)
-        print(f"self.bottle[0] shape: {self.bottle}")
+
         stacked_bottle = torch.stack(self.bottle, dim=-1)
         new_bottleneck = torch.mean(stacked_bottle, dim=-1)
         
-        print(f"new_aftermean_bottleneck shape is {new_bottleneck}")
+
         self.bottleneck = nn.Parameter(new_bottleneck)
 
         return input_out_lang
@@ -372,10 +372,9 @@ class GRU_context(nn.Module):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         return hidden.to(device)
     
-    def forward(self, inputs, seq_lengths, hidden):
+    def forward(self, inputs, hidden):
         
-        gru_input = nn.utils.rnn.pack_padded_sequence(inputs, seq_lengths, batch_first=True)
-        output, hidden = self.gru(gru_input, hidden)
+        output, hidden = self.gru(inputs, hidden)
                     
         fc_output = self.fc1(output)
         fc_output = self.fc2(output)
@@ -446,13 +445,18 @@ class CMELayer(nn.Module):
         
         lang_att_output = self.audio_bottleneck_fusion(lang_att_output, lang_attention_mask, audio_att_output, audio_attention_mask)
         audio_att_output = self.lang_bottleneck_fusion(audio_att_output, audio_attention_mask, lang_att_output, lang_attention_mask)
-        print("finish lang bottleneck")
+        
+        print(f"the shape of lang_att_output is :{lang_att_output.size()}")
+        print(f"the shape of audio_att_output is :{audio_att_output.size()}")
+        # print("finish lang bottleneck")
         # lang_att_output, audio_att_output = self.cross_att(lang_att_output, lang_attention_mask,
         #                                                    audio_att_output, audio_attention_mask)
         lang_att_output, audio_att_output = self.self_att(lang_att_output, lang_attention_mask,
                                                           audio_att_output, audio_attention_mask)
         lang_output, audio_output = self.output_fc(
             lang_att_output, audio_att_output)
+        
+        # print(f"the shape of lang_output is :{lang_output.size()}")
 
         return lang_output, audio_output
 
@@ -468,8 +472,8 @@ class GRULayer(nn.Module):
         self.multihead_att = nn.MultiheadAttention(config.input_dim, config.num_heads, config.dropout, batch_first=True)
         
         
-    def forward(self, input_dim, seq_lengths, hidden):
-        gru_output = self.gru(input_dim, seq_lengths, hidden)
+    def forward(self, input, hidden):
+        gru_output = self.gru(input, hidden)
         
         # Multihead Attention
         attention_output, atteenion_weights = self.multihead_att(gru_output, gru_output, gru_output)

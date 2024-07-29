@@ -14,51 +14,37 @@ import soundfile as sf
 import os
 
 
-# class AudioAugmentation:
-#     def __init__(self,min_shift=-0.5, max_shift=0.5):
-#         self.augment = audiomentations.Compose([
-#             audiomentations.AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
-#             audiomentations.AddGaussianSNR(min_snr_db=5.0, max_snr_db=40.0, p=0.5),
-#             audiomentations.TimeMask(min_band_part=0.1, max_band_part=0.5, p=0.5),
-#             audiomentations.PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
-#             audiomentations.Shift(min_shift==-0.5, max_shift==0.5, p=0.5),
-#             audiomentations.Normalize(p=0.5)
-#         ])
 
-#     def __call__(self, audio):
-#         return self.augment(audio, sample_rate=16000)
-
-
-class DynamicBatchSampler(BatchSampler):
-    def __init__(self,label_csv_path,shuffle=False):
-        self.audio_directory = label_csv_path
-        self.shuffle = shuffle
+# class DynamicBatchSampler(BatchSampler):
+#     def __init__(self,label_csv_path,shuffle=False):
+#         self.audio_directory = label_csv_path
+#         self.shuffle = shuffle
         
-        df = pd.read_csv(label_csv_path)
+#         df = pd.read_csv(label_csv_path)
         
-        #创建一个从电话号码到所有对话段的索引的列表的映射
-        self.phone_to_dialogue = {}
-        phone_list = list(df['phone'])
-        for idx, phone in enumerate(phone_list):
-            if phone not in self.phone_to_dialogue:
-                self.phone_to_dialogue[phone] = []
-            self.phone_to_dialogue[phone].append(idx
-            )
+#         #创建一个从电话号码到所有对话段的索引的列表的映射
+#         self.phone_to_dialogue = {}
+#         phone_list = list(df['phone'])
+#         for idx, phone in enumerate(phone_list):
+#             if phone not in self.phone_to_dialogue:
+#                 self.phone_to_dialogue[phone] = []
+#             self.phone_to_dialogue[phone].append(idx
+#             )
             
             
-    def __iter__(self):
-        dialogue_keys = list(self.phone_to_dialogue.keys())
-        if self.shuffle:
-            # 如果启用洗牌，随机打乱电话号码键列表
-            random.shuffle(dialogue_keys)
+#     def __iter__(self):
+#         dialogue_keys = list(self.phone_to_dialogue.keys())
+#         if self.shuffle:
+#             # 如果启用洗牌，随机打乱电话号码键列表
+#             random.shuffle(dialogue_keys)
         
-        for key in dialogue_keys:
-            segment_indices = self.phone_to_dialogue[key]
-            print(f"Yielding batch for {key} with size {len(segment_indices)}")
-            yield segment_indices
+#         for key in dialogue_keys:
+#             segment_indices = self.phone_to_dialogue[key]
+#             print(f"Yielding batch for {key} with size {len(segment_indices)}")
+#             yield segment_indices
             
-    def __len__(self):
-        return len(self.phone_to_dialogue)
+#     def __len__(self):
+#         return len(self.phone_to_dialogue)
 
 
 class Dataset_audio_text(torch.utils.data.Dataset):
@@ -68,7 +54,8 @@ class Dataset_audio_text(torch.utils.data.Dataset):
         # store the label and text
         encoder = LabelEncoder()
         self.targets = encoder.fit_transform(list(df['label']))
-        self.texts = list(df['text'])
+        self.phone_groups = df.groupby('phone')
+        self.texts = df['text'].tolist()
         self.tokenizer = AutoTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
 
         # store the audio
@@ -79,54 +66,65 @@ class Dataset_audio_text(torch.utils.data.Dataset):
         
 
     def __getitem__(self, index):
-        # extract text features
-        text = str(self.texts[index])
-
+        phone = list(self.phone_groups.indices.keys())[index]
+        indeces = self.phone_groups.indices[phone]
+        print(f"the indeces is {indeces}")
+        # extract text feature
         # tokenize text
-        tokenized_text = self.tokenizer(
-            text,
+        tokenized_text = [self.tokenizer(
+            str(self.texts[i]),
             max_length=512,
             padding="max_length",
             truncation=True,
             add_special_tokens=True,
             return_attention_mask=True
-        )
-        # print(tokenized_text)
-
+        ) for i in indeces]
+        print(f"the shape of tokenized_text is {len(tokenized_text)}")
+        text_tokens = torch.stack([torch.Tensor(tt["input_ids"]) for tt in tokenized_text])
+        text_masks = torch.stack([torch.Tensor(tt["attention_mask"]) for tt in tokenized_text])
+        
+        audio_features = []
+        audio_masks = []
         # load audio
-        sound, _ = torchaudio.load(self.audio_file_paths[index])
+        for i in indeces:
+            sound, _ = torchaudio.load(self.audio_file_paths[i])
         
         # Convert tensor to numpy array
-        sound = sound.numpy()
+            sound = sound.numpy()
 
-        if isinstance(sound, np.ndarray):
-            sound = torch.tensor(sound)
+            if isinstance(sound, np.ndarray):
+                sound = torch.tensor(sound)
         # Convert multi-channel audio to single-channel
-        soundData = torch.mean(sound, dim=0, keepdim=False)
+            soundData = torch.mean(sound, dim=0, keepdim=False)
 
         # extract audio features
-        features = self.feature_extractor(
-            soundData, sampling_rate=16000, max_length=96000,
-            return_attention_mask=True, truncation=True, padding="max_length"
-        )
-        audio_features = torch.tensor(np.array(features['input_values']), dtype=torch.float32).squeeze()
-        audio_masks = torch.tensor(np.array(features['attention_mask']), dtype=torch.long).squeeze()
+            features = self.feature_extractor(
+                soundData, sampling_rate=16000, max_length=96000,
+                return_attention_mask=True, truncation=True, padding="max_length"
+            )
+            audio_features.append(torch.tensor(np.array(features['input_values']), dtype=torch.float32).squeeze())
+            audio_masks.append(torch.tensor(np.array(features['attention_mask']), dtype=torch.long).squeeze())
+        audio_features = torch.stack(audio_features)
+        audio_masks = torch.stack(audio_masks)
+        target = self.targets[indeces[0]]
+        
+        
 
         return {
-            "text_tokens": tokenized_text["input_ids"],
-            "text_masks": tokenized_text["attention_mask"],
+            "text_tokens": text_tokens,
+            "text_masks": text_masks,
             "audio_inputs": audio_features,
             "audio_masks": audio_masks,
             "target": {
-                "M": self.targets[index]
+                "M": target
             }
         }
 
     def __len__(self):
-        return len(self.targets)
+        return len(self.phone_groups)
 
 
-def collate_fn_sims(batch):
+def collate_fn(batch):
     text_tokens = []
     text_masks = []
     audio_inputs = []
@@ -145,11 +143,13 @@ def collate_fn_sims(batch):
 
        # labels
         targets_M.append(batch[i]['target']['M'])
+        
+    print(f"text_tokens: {len(text_tokens)}")
 
     return {
         # text
-        "text_tokens": torch.tensor(text_tokens, dtype=torch.long),
-        "text_masks": torch.tensor(text_masks, dtype=torch.long),
+        "text_tokens": (text_tokens),
+        "text_masks": torch.stack(text_masks),
         # audio
         "audio_inputs": torch.stack(audio_inputs),
         "audio_masks": torch.stack(audio_masks),
@@ -159,36 +159,29 @@ def collate_fn_sims(batch):
     }
 
 
-def data_loader():
+def data_loader(batch_size):
     # csv_path = 'data/labell.csv'
     # audio_file_path = "data/OnlyCustomer"
     # data = Dataset_audio_text(csv_path, audio_file_path)
     # train_data, test_data, val_data = torch.utils.data.random_split(
     #     data, [int(0.8*len(data)), int(0.1*len(data)), len(data)-int(0.8*len(data))-int(0.1*len(data))])
     train_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qalabel.csv'
-    test_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/testlabel.csv'
-    verify_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/verifylabel.csv'
+    # test_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/testlabel.csv'
+    # verify_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/verifylabel.csv'
     
     train_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/output_segments'
-    test_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/test'
-    verify_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/verify'
-    
-    
-
-    
+    # test_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/test'
+    # verify_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/verify'
     
     train_data = Dataset_audio_text(train_label_path, train_file_path)
-    test_data = Dataset_audio_text(test_label_path, test_file_path)
-    val_data = Dataset_audio_text(verify_label_path, verify_file_path)
+    # test_data = Dataset_audio_text(test_label_path, test_file_path)
+    # val_data = Dataset_audio_text(verify_label_path, verify_file_path)
     
-    batch_sampler_train = DynamicBatchSampler(train_label_path,shuffle= True)
-    # batch_sampler_test = DynamicBatchSampler(test_label_path)
-    # batch_sampler_verify = DynamicBatchSampler(verify_label_path)
     
     train_loader = DataLoader(
-        train_data, batch_sampler=batch_sampler_train, collate_fn=collate_fn_sims)
+        train_data, batch_size=batch_size, collate_fn=collate_fn)
     # test_loader = DataLoader(
-    #     test_data, batch_sampler=batch_sampler_test, collate_fn=collate_fn_sims)
-    # val_loader = DataLoader(val_data, batch_sampler=batch_sampler_verify,
-    #                         collate_fn=collate_fn_sims)
+    #     test_data,  batch_size=batch_size, collate_fn=collate_fn)
+    # val_loader = DataLoader(val_data,  batch_size=batch_size,
+    #                         collate_fn=collate_fn)
     return train_loader
