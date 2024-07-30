@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from transformers import RobertaModel, HubertModel, AutoModel
-from utils.cross_attn_encoder import CMELayer, BertConfig, GRULayer, GruConfig
+from utils.cross_attn_encoder import CMELayer, BertConfig
 # from positional_encodings.torch_encodings import PositionalEncodingPermute1D, Summer
 import torch.nn.functional as F
 
@@ -43,10 +43,10 @@ class rob_hub_cme(nn.Module):
             [CMELayer(Bert_config) for _ in range(Bert_config.num_hidden_layers)]
         )
         
-        GRU_config = GruConfig(hidden_size=config.hidden_size, num_layers=config.num_layers)
-        self.GRU_layers = nn.ModuleList(
-            [GRULayer(GRU_config) for _ in range(GRU_config.num_layers)]
-        )
+        # GRU_config = GruConfig(hidden_size=config.hidden_size, num_layers=config.num_layers)
+        # self.GRU_layers = nn.ModuleList(
+        #     [GRULayer(GRU_config) for _ in range(GRU_config.num_layers)]
+        # )
 
         # fused method V2
         self.text_mixed_layer = nn.Sequential(
@@ -86,53 +86,89 @@ class rob_hub_cme(nn.Module):
             embedding_layer = self.audio_mixed_cls_emb
         index = torch.LongTensor([0]).to(device=inputs.device)
         cls_emb = embedding_layer(index)
-        cls_emb = cls_emb.expand(inputs.size(0), 1, inputs.size(2))
-        outputs = torch.cat((cls_emb, inputs), dim=1)
+        cls_emb = cls_emb.expand(inputs.size(0), inputs.size(1),1, inputs.size(2))
+        outputs = torch.cat((cls_emb, inputs), dim=2)
         
-        cls_mask = torch.ones(inputs.size(0), 1).to(device=inputs.device)
-        masks = torch.cat((cls_mask, masks), dim=1)
+        cls_mask = torch.ones(inputs.size(0), inputs.size(1),1).to(device=inputs.device)
+        masks = torch.cat((cls_mask, masks), dim=2)
         return outputs, masks
     
     def forward(self, text_inputs, text_mask, audio_inputs, audio_mask):
+
         # text feature extraction
-        raw_output = self.roberta_model(text_inputs, text_mask)
-        T_hidden_states = raw_output.last_hidden_state
-        T_features = raw_output["pooler_output"]  # Shape is [batch_size, 768]
-                
+        t_output = torch.zeros(text_inputs.shape[0], text_inputs.shape[1], 768).to(device)
+        t_hidden = torch.zeros(text_inputs.shape[0], text_inputs.shape[1], text_inputs.shape[2], 768).to(device)
+        for i in range(len(text_inputs[1])):
+            segment = text_inputs[:,i,:].to(device)
+            mask = text_mask[:,i,:].to(device)
+
+            raw_output = self.roberta_model(segment, mask)
+
+            T_hidden_states = raw_output.last_hidden_state
+            T_features = raw_output["pooler_output"]  # Shape is [batch_size, 768]
+            t_output[:,i,:] = T_features
+            t_hidden[:,i,:,:] = T_hidden_states 
+            
+        print(f"the shape of t_output: {t_output.shape}")
+        print(f"the shape of t_hidden: {t_hidden.shape}")
+                    
         # audio feature extraction
-        audio_out = self.hubert_model(audio_inputs, audio_mask, output_attentions=True)
-        A_hidden_states = audio_out.last_hidden_state
+        a_hidden = torch.zeros(audio_inputs.shape[0], audio_inputs.shape[1], 299, 768).to(device)
+        for i in range(len(audio_inputs[1])):
+            audio_segment = audio_inputs[:,i,:].to(device)
+            audio_mask_segment = audio_mask[:,i,:].to(device)
+            
+            audio_out = self.hubert_model(audio_segment, audio_mask_segment, output_attentions=True)
+            
+            A_hidden_states = audio_out.last_hidden_state
+            
+            a_hidden[:,i,:,:] = A_hidden_states
+            
+        print(f"shape of a_features: {a_hidden.shape}")
         ## average over unmasked audio tokens
-        A_features = []
+        # A_features = []
         audio_mask_idx_new = []
         for batch in range(A_hidden_states.shape[0]):
-            layer = 0
-            while layer<12:
-                try:
-                    padding_idx = sum(audio_out.attentions[layer][batch][0][0]!=0)
-                    audio_mask_idx_new.append(padding_idx)
-                    break
-                except:
-                    layer += 1
-            truncated_feature = torch.mean(A_hidden_states[batch][:padding_idx],0) #Shape is [768]
-            A_features.append(truncated_feature)
-        A_features = torch.stack(A_features,0).to(device)
+            dialog_audio_mask_idx_new = []
+            for dialog in range(A_hidden_states.shape[1]):
+                layer = 0
+                while layer<12:
+                    try:
+                        padding_idx = sum(audio_out.attentions[dialog][layer][batch][0][0]!=0)
+                        dialog_audio_mask_idx_new.append(padding_idx)
+                        break
+                    except:
+                        layer += 1
+                # print(f"the dialog_audio_mask_idx_new: {dialog_audio_mask_idx_new}")
+                        
+            audio_mask_idx_new.append(dialog_audio_mask_idx_new)
+        #     truncated_feature = torch.mean(A_hidden_states[batch][:padding_idx],0) #Shape is [768]
+        #     A_features.append(truncated_feature)
+        # A_features = torch.stack(A_features,0).to(device)
+
+        print(f"shape of audio_mask_idx_new: {audio_mask_idx_new}")
         
         ## create new audio mask
-        audio_mask_new = torch.zeros(A_hidden_states.shape[0], A_hidden_states.shape[1]).to(device)
+        audio_mask_new = torch.zeros(a_hidden.shape[0], a_hidden.shape[1], a_hidden.shape[2]).to(device)
         for batch in range(audio_mask_new.shape[0]):
-            audio_mask_new[batch][:audio_mask_idx_new[batch]] = 1
+            for dialog in range(audio_mask_new.shape[1]):
+                audio_mask_new[batch][dialog][:audio_mask_idx_new[batch][dialog]] = 1
                 
         # text output layer
         T_output = self.T_output_layers(T_features)                    # Shape is [batch_size, 2]
         
         # audio output layer
-        A_output = self.A_output_layers(A_features)                    # Shape is [batch_size, 2]
+        # A_output = self.A_output_layers(A_features)                    # Shape is [batch_size, 2]
         
         # CME layers
         ## prepend cls tokens
-        text_inputs, text_attn_mask = self.prepend_cls(T_hidden_states, text_mask, 'text') # add cls token
-        audio_inputs, audio_attn_mask = self.prepend_cls(A_hidden_states, audio_mask_new, 'audio') # add cls token
+        # print(f"shape of A_hidden_states: {A_hidden_states.shape}")
+        text_inputs, text_attn_mask = self.prepend_cls(t_hidden, text_mask, 'text') # add cls token
+        audio_inputs, audio_attn_mask = self.prepend_cls(a_hidden, audio_mask_new, 'audio') # add cls token
+        print(f"shape of audio_inputs: {audio_inputs.shape}")
+        print(f"shape of audio_attn_mask: {audio_attn_mask.shape}")
+        print(f"shape of text_inputs: {text_inputs.shape}")
+        print(f"shape of text_attn_mask: {text_attn_mask.shape}")
 
         # position encoding
         # pos_enc_text = Summer(PositionalEncodingPermute1D(text_inputs.shape[1]))
@@ -144,26 +180,33 @@ class rob_hub_cme(nn.Module):
         for layer_module in self.CME_layers:
             text_inputs, audio_inputs = layer_module(text_inputs, text_attn_mask,
                                                 audio_inputs, audio_attn_mask)
+            
+        print(f"shape of text_inputs: {text_inputs.shape}")
+        print(f"shape of audio_inputs: {audio_inputs.shape}")
+        print(f"shape of text_attn_mask: {text_attn_mask.shape}")
+        print(f"shape of audio_attn_mask: {audio_attn_mask.shape}")
             # concatenate original features with fused features
             
             
-        text_concat_features = torch.cat((T_hidden_states, text_inputs[:,1:,:]), dim=2) # Shape is [batch_size, text_length, 768*2]
-        audio_concat_features = torch.cat((A_hidden_states, audio_inputs[:,1:,:]), dim=2) # Shape is [batch_size, audio_length, 768*2]
-        text_concat_features, text_attn_mask = self.prepend_cls(text_concat_features, text_mask, 'text_mixed') # add cls token
-        audio_concat_features, audio_attn_mask = self.prepend_cls(audio_concat_features, audio_mask_new, 'audio_mixed') # add cls token
-        text_mixed_features = self.text_encoder(text_concat_features, src_key_padding_mask=(1-text_attn_mask).bool())
-        audio_mixed_features = self.audio_encoder(audio_concat_features, src_key_padding_mask=(1-audio_attn_mask).bool())
-        # fused features
-        fused_hidden_states = torch.cat((text_mixed_features[:,0,:], audio_mixed_features[:,0,:]), dim=1) # Shape is [batch_size, 768*4]
+        # text_concat_features = torch.cat((T_hidden_states, text_inputs[:,1:,:]), dim=2) # Shape is [batch_size, text_length, 768*2]
+        # audio_concat_features = torch.cat((A_hidden_states, audio_inputs[:,1:,:]), dim=2) # Shape is [batch_size, audio_length, 768*2]
+        # text_concat_features, text_attn_mask = self.prepend_cls(text_concat_features, text_mask, 'text_mixed') # add cls token
+        # audio_concat_features, audio_attn_mask = self.prepend_cls(audio_concat_features, audio_mask_new, 'audio_mixed') # add cls token
+        # text_mixed_features = self.text_encoder(text_concat_features, src_key_padding_mask=(1-text_attn_mask).bool())
+        # audio_mixed_features = self.audio_encoder(audio_concat_features, src_key_padding_mask=(1-audio_attn_mask).bool())
+        # # fused features
+        # fused_hidden_states = torch.cat((text_mixed_features[:,0,:], audio_mixed_features[:,0,:]), dim=1) # Shape is [batch_size, 768*4]
+        
+        
 
         # last linear output layer
-        fused_output = self.fused_output_layers(fused_hidden_states) # Shape is [batch_size, 5]
+        # fused_output = self.fused_output_layers(fused_hidden_states) # Shape is [batch_size, 5]
         
         # attention_output = self.GRU_layers(input_dim, seq_lengths, hidden)
         
         
         
-        return fused_output
+        # return fused_output
         
         # return {
         #         'T': T_output, 

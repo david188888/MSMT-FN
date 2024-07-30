@@ -59,7 +59,7 @@ class Dataset_audio_text(torch.utils.data.Dataset):
         self.tokenizer = AutoTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
 
         # store the audio
-        self.audio_file_paths = [f"{audio_directory}/{audio_id}" for audio_id in df['audio_id']]
+        self.audio_file_paths = [f"{audio_directory}/{audio_id}" for audio_id in df['Audio_id']]
         self.feature_extractor = Wav2Vec2FeatureExtractor(
             feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=True
         )
@@ -68,7 +68,7 @@ class Dataset_audio_text(torch.utils.data.Dataset):
     def __getitem__(self, index):
         phone = list(self.phone_groups.indices.keys())[index]
         indeces = self.phone_groups.indices[phone]
-        print(f"the indeces is {indeces}")
+        # print(f"the indeces is {indeces}")
         # extract text feature
         # tokenize text
         tokenized_text = [self.tokenizer(
@@ -79,8 +79,8 @@ class Dataset_audio_text(torch.utils.data.Dataset):
             add_special_tokens=True,
             return_attention_mask=True
         ) for i in indeces]
-        print(f"the shape of tokenized_text is {len(tokenized_text)}")
         text_tokens = torch.stack([torch.Tensor(tt["input_ids"]) for tt in tokenized_text])
+        # print(f"the torch shape of text_tokens is {text_tokens.shape}")
         text_masks = torch.stack([torch.Tensor(tt["attention_mask"]) for tt in tokenized_text])
         
         audio_features = []
@@ -144,15 +144,22 @@ def collate_fn(batch):
        # labels
         targets_M.append(batch[i]['target']['M'])
         
-    print(f"text_tokens: {len(text_tokens)}")
+    # print(f"size of text_tokens: {len(text_tokens), len(text_tokens[0]), len(text_tokens[0][0])}")
+    # print(f"size of audio_inputs: {len(audio_inputs), len(audio_inputs[0]), len(audio_inputs[0][0])}")
+    # print(f"targets_M: {targets_M}")
+    
+    text_tokens = [torch.tensor(tt, dtype=torch.long) for tt in text_tokens]
+    text_masks = [torch.tensor(tm, dtype=torch.long) for tm in text_masks]
+    audio_inputs = [torch.tensor(ai) for ai in audio_inputs]
+    audio_masks = [torch.tensor(am) for am in audio_masks]
 
     return {
         # text
-        "text_tokens": (text_tokens),
-        "text_masks": torch.stack(text_masks),
+        "text_tokens": torch.nn.utils.rnn.pad_sequence(text_tokens, batch_first=True),
+        "text_masks": torch.nn.utils.rnn.pad_sequence(text_masks, batch_first=True),
         # audio
-        "audio_inputs": torch.stack(audio_inputs),
-        "audio_masks": torch.stack(audio_masks),
+        "audio_inputs": torch.nn.utils.rnn.pad_sequence(audio_inputs, batch_first=True),
+        "audio_masks": torch.nn.utils.rnn.pad_sequence(audio_masks, batch_first=True),
         # labels
         "targets": 
             torch.tensor(targets_M, dtype=torch.float32),
@@ -165,23 +172,23 @@ def data_loader(batch_size):
     # data = Dataset_audio_text(csv_path, audio_file_path)
     # train_data, test_data, val_data = torch.utils.data.random_split(
     #     data, [int(0.8*len(data)), int(0.1*len(data)), len(data)-int(0.8*len(data))-int(0.1*len(data))])
-    train_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qalabel.csv'
-    # test_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/testlabel.csv'
-    # verify_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/verifylabel.csv'
+    train_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_data/train/dialog_test_11.csv'
+    test_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_data/test/dialog_test_11.csv'
+    verify_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_data/verify/dialog_test_11.csv'
     
-    train_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/output_segments'
-    # test_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/test'
-    # verify_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/Origin/verify'
+    train_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_data/train/dialog'
+    test_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_data/test/dialog'
+    verify_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_data/verify/dialog'
     
     train_data = Dataset_audio_text(train_label_path, train_file_path)
-    # test_data = Dataset_audio_text(test_label_path, test_file_path)
-    # val_data = Dataset_audio_text(verify_label_path, verify_file_path)
+    test_data = Dataset_audio_text(test_label_path, test_file_path)
+    val_data = Dataset_audio_text(verify_label_path, verify_file_path)
     
     
     train_loader = DataLoader(
         train_data, batch_size=batch_size, collate_fn=collate_fn)
-    # test_loader = DataLoader(
-    #     test_data,  batch_size=batch_size, collate_fn=collate_fn)
-    # val_loader = DataLoader(val_data,  batch_size=batch_size,
-    #                         collate_fn=collate_fn)
-    return train_loader
+    test_loader = DataLoader(
+        test_data,  batch_size=batch_size, collate_fn=collate_fn)
+    val_loader = DataLoader(val_data,  batch_size=batch_size,
+                            collate_fn=collate_fn)
+    return train_loader, test_loader, val_loader

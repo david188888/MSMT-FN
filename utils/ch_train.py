@@ -1,9 +1,10 @@
+from typing import List
 import torch
 from torch import nn
-from torch.utils.data import TensorDataset, ConcatDataset, DataLoader
+from torch.utils.data import BatchSampler
 from tqdm import tqdm
 from utils.metricsTop import MetricsTop
-from utils.ch_model import rob_hub_cc, rob_hub_cme
+from utils.ch_model import rob_hub_cme
 import random
 import numpy as np
 from utils.data_loader import data_loader
@@ -57,7 +58,7 @@ class ChConfig(object):
                  dropout=0.3,
                  model='cme',
                  audio_feature='raw',
-                 batch_size=1,
+                 batch_size=2,
                  cme_version='v3',
                  tasks='MTA',
                  num_hidden_layers=3,
@@ -260,6 +261,8 @@ class ChTrainer():
         
                 
         return eval_results
+    
+    
 
 
 def ChRun(config):
@@ -270,12 +273,12 @@ def ChRun(config):
     torch.backends.cudnn.deterministic = True
     torch.cuda.empty_cache()
 
-    train_loader, test_loader, val_loader = data_loader(
-        config.batch_size)
+    
 
-    if config.model == 'cc':
-        model = rob_hub_cc(config).to(device)
-    elif config.model == 'cme':
+    train_loader, test_loader, val_loader = data_loader(batch_size=config.batch_size)
+    
+
+    if config.model == 'cme':
         model = rob_hub_cme(config).to(device)
     for param in model.hubert_model.feature_extractor.parameters():
         param.requires_grad = False
@@ -299,44 +302,44 @@ def ChRun(config):
         # nni.report_intermediate_result(eval_results['Mult_acc_5'])
         mode = "VAL"
         total_loss_val = eval_results['Loss']
-        writer_val.add_scalar('Loss/'+mode, total_loss_val, epoch)
-        writer_val.add_scalar('F1/'+mode, eval_results['F1_score'], epoch)
-        writer_val.add_scalar('ACC2/'+mode, eval_results['Mult_acc_2'], epoch)
-        writer_val.add_scalar('ACC3/'+mode, eval_results['Mult_acc_3'], epoch)
-        writer_val.add_scalar('ACC4/'+mode, eval_results['Mult_acc_4'], epoch)
-        writer_val.add_scalar('ACC5/'+mode, eval_results['Mult_acc_5'], epoch)
-        writer_val.add_scalar('MAE/'+mode, eval_results['MAE'], epoch)
-        writer_val.add_scalar('Corr/'+mode, eval_results['Corr'], epoch)
+        # writer_val.add_scalar('Loss/'+mode, total_loss_val, epoch)
+        # writer_val.add_scalar('F1/'+mode, eval_results['F1_score'], epoch)
+        # writer_val.add_scalar('ACC2/'+mode, eval_results['Mult_acc_2'], epoch)
+        # writer_val.add_scalar('ACC3/'+mode, eval_results['Mult_acc_3'], epoch)
+        # writer_val.add_scalar('ACC4/'+mode, eval_results['Mult_acc_4'], epoch)
+        # writer_val.add_scalar('ACC5/'+mode, eval_results['Mult_acc_5'], epoch)
+        # writer_val.add_scalar('MAE/'+mode, eval_results['MAE'], epoch)
+        # writer_val.add_scalar('Corr/'+mode, eval_results['Corr'], epoch)
 #         test_results = trainer.do_test(model, test_loader,"TEST")
-        if eval_results['Loss'] < lowest_eval_loss:
-            lowest_eval_loss = eval_results['Loss']
-            torch.save(model.state_dict(), config.model_save_path+'origin_loss.pth')
-            best_epoch = epoch
-        if eval_results['Mult_acc_5'] >= highest_eval_acc_5:
-            highest_eval_acc_5 = eval_results['Mult_acc_5']
-            torch.save(model.state_dict(), config.model_save_path+'origin_acc_5.pth')
+        # if eval_results['Loss'] < lowest_eval_loss:
+        #     lowest_eval_loss = eval_results['Loss']
+        #     torch.save(model.state_dict(), config.model_save_path+'origin_loss.pth')
+        #     best_epoch = epoch
+        # if eval_results['Mult_acc_5'] >= highest_eval_acc_5:
+        #     highest_eval_acc_5 = eval_results['Mult_acc_5']
+        #     torch.save(model.state_dict(), config.model_save_path+'origin_acc_5.pth')
             
-        if eval_results['Mult_acc_4'] >= highest_eval_acc_4:
-            highest_eval_acc_4 = eval_results['Mult_acc_4']
-            torch.save(model.state_dict(), config.model_save_path+'origin_acc_4.pth')
+        # if eval_results['Mult_acc_4'] >= highest_eval_acc_4:
+        #     highest_eval_acc_4 = eval_results['Mult_acc_4']
+        #     torch.save(model.state_dict(), config.model_save_path+'origin_acc_4.pth')
             
-        if eval_results['Mult_acc_3'] >= highest_eval_acc_3:
-            highest_eval_acc_3 = eval_results['Mult_acc_3']
-            torch.save(model.state_dict(), config.model_save_path+'origin_acc_3.pth')
+        # if eval_results['Mult_acc_3'] >= highest_eval_acc_3:
+        #     highest_eval_acc_3 = eval_results['Mult_acc_3']
+        #     torch.save(model.state_dict(), config.model_save_path+'origin_acc_3.pth')
             
-        if eval_results['Mult_acc_2'] >= highest_eval_acc_2:
-            highest_eval_acc_2 = eval_results['Mult_acc_2']
-            torch.save(model.state_dict(), config.model_save_path+'origin_acc_2.pth')
+        # if eval_results['Mult_acc_2'] >= highest_eval_acc_2:
+        #     highest_eval_acc_2 = eval_results['Mult_acc_2']
+        #     torch.save(model.state_dict(), config.model_save_path+'origin_acc_2.pth')
         
 
-        with open('results/origin/val_results_origin.txt', 'a') as f:
-            f.write('EPOCH: '+str(epoch)+'  '+dict_to_str(eval_results)+'\n')
-            f.write('best_epoch: '+str(best_epoch)+'  '+'lowest_eval_loss: '+str(lowest_eval_loss)+'\n')
+        # with open('results/origin/val_results_origin.txt', 'a') as f:
+        #     f.write('EPOCH: '+str(epoch)+'  '+dict_to_str(eval_results)+'\n')
+        #     f.write('best_epoch: '+str(best_epoch)+'  '+'lowest_eval_loss: '+str(lowest_eval_loss)+'\n')
 
 #     model.eval()
 
     for i in range(2,6):
-        model.load_state_dict(torch.load(config.model_save_path+'origin_acc_'+str(i)+'.pth'))
+        # model.load_state_dict(torch.load(config.model_save_path+'origin_acc_'+str(i)+'.pth'))
         model.eval()
         acc_test_results = trainer.do_test(model, test_loader, "TEST")
         # nni.report_final_result(test_results_acc['Mult_acc_5'])
@@ -353,14 +356,14 @@ def ChRun(config):
           dict_to_str(loss_test_results))
     
     
-    # 将结果存进对应的文件
-    with open('results/origin/test_results_origin.txt', 'w+') as f:
-        f.write('TEST (highest val acc) ' + ', '.join(map(str, total_acc_test)) + '\n')
-        f.write('TEST (lowest val loss) ' + dict_to_str(loss_test_results) + '\n')
+    # # 将结果存进对应的文件
+    # with open('results/origin/test_results_origin.txt', 'w+') as f:
+    #     f.write('TEST (highest val acc) ' + ', '.join(map(str, total_acc_test)) + '\n')
+    #     f.write('TEST (lowest val loss) ' + dict_to_str(loss_test_results) + '\n')
     
-    writer_train.close()
-    writer_test.close()
-    writer_val.close()
+    # writer_train.close()
+    # writer_test.close()
+    # writer_val.close()
     
 
 
