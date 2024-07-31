@@ -86,7 +86,7 @@ class rob_hub_cme(nn.Module):
             embedding_layer = self.audio_mixed_cls_emb
         index = torch.LongTensor([0]).to(device=inputs.device)
         cls_emb = embedding_layer(index)
-        cls_emb = cls_emb.expand(inputs.size(0), inputs.size(1),1, inputs.size(2))
+        cls_emb = cls_emb.expand(inputs.size(0), inputs.size(1), 1, inputs.size(3))
         outputs = torch.cat((cls_emb, inputs), dim=2)
         
         cls_mask = torch.ones(inputs.size(0), inputs.size(1),1).to(device=inputs.device)
@@ -109,11 +109,12 @@ class rob_hub_cme(nn.Module):
             t_output[:,i,:] = T_features
             t_hidden[:,i,:,:] = T_hidden_states 
             
-        print(f"the shape of t_output: {t_output.shape}")
-        print(f"the shape of t_hidden: {t_hidden.shape}")
+        # print(f"the shape of t_output: {t_output.shape}")
+        # print(f"the shape of t_hidden: {t_hidden.shape}")
                     
         # audio feature extraction
         a_hidden = torch.zeros(audio_inputs.shape[0], audio_inputs.shape[1], 299, 768).to(device)
+        a_attention = []
         for i in range(len(audio_inputs[1])):
             audio_segment = audio_inputs[:,i,:].to(device)
             audio_mask_segment = audio_mask[:,i,:].to(device)
@@ -121,10 +122,13 @@ class rob_hub_cme(nn.Module):
             audio_out = self.hubert_model(audio_segment, audio_mask_segment, output_attentions=True)
             
             A_hidden_states = audio_out.last_hidden_state
+            A_attention = audio_out.attentions
+            
             
             a_hidden[:,i,:,:] = A_hidden_states
+            a_attention.append(A_attention)
             
-        print(f"shape of a_features: {a_hidden.shape}")
+        # print(f"shape of a_features: {a_hidden.shape}")
         ## average over unmasked audio tokens
         # A_features = []
         audio_mask_idx_new = []
@@ -134,7 +138,7 @@ class rob_hub_cme(nn.Module):
                 layer = 0
                 while layer<12:
                     try:
-                        padding_idx = sum(audio_out.attentions[dialog][layer][batch][0][0]!=0)
+                        padding_idx = sum(a_attention[dialog][layer][batch][0][0]!=0)
                         dialog_audio_mask_idx_new.append(padding_idx)
                         break
                     except:
@@ -146,7 +150,6 @@ class rob_hub_cme(nn.Module):
         #     A_features.append(truncated_feature)
         # A_features = torch.stack(A_features,0).to(device)
 
-        print(f"shape of audio_mask_idx_new: {audio_mask_idx_new}")
         
         ## create new audio mask
         audio_mask_new = torch.zeros(a_hidden.shape[0], a_hidden.shape[1], a_hidden.shape[2]).to(device)
@@ -165,10 +168,10 @@ class rob_hub_cme(nn.Module):
         # print(f"shape of A_hidden_states: {A_hidden_states.shape}")
         text_inputs, text_attn_mask = self.prepend_cls(t_hidden, text_mask, 'text') # add cls token
         audio_inputs, audio_attn_mask = self.prepend_cls(a_hidden, audio_mask_new, 'audio') # add cls token
-        print(f"shape of audio_inputs: {audio_inputs.shape}")
-        print(f"shape of audio_attn_mask: {audio_attn_mask.shape}")
-        print(f"shape of text_inputs: {text_inputs.shape}")
-        print(f"shape of text_attn_mask: {text_attn_mask.shape}")
+        # print(f"shape of audio_inputs: {audio_inputs.shape}")
+        # print(f"shape of audio_attn_mask: {audio_attn_mask.shape}")
+        # print(f"shape of text_inputs: {text_inputs.shape}")
+        # print(f"shape of text_attn_mask: {text_attn_mask.shape}")
 
         # position encoding
         # pos_enc_text = Summer(PositionalEncodingPermute1D(text_inputs.shape[1]))
@@ -181,10 +184,10 @@ class rob_hub_cme(nn.Module):
             text_inputs, audio_inputs = layer_module(text_inputs, text_attn_mask,
                                                 audio_inputs, audio_attn_mask)
             
-        print(f"shape of text_inputs: {text_inputs.shape}")
-        print(f"shape of audio_inputs: {audio_inputs.shape}")
-        print(f"shape of text_attn_mask: {text_attn_mask.shape}")
-        print(f"shape of audio_attn_mask: {audio_attn_mask.shape}")
+        # print(f"shape of text_inputs: {text_inputs.shape}")
+        # print(f"shape of audio_inputs: {audio_inputs.shape}")
+        # print(f"shape of text_attn_mask: {text_attn_mask.shape}")
+        # print(f"shape of audio_attn_mask: {audio_attn_mask.shape}")
             # concatenate original features with fused features
             
             

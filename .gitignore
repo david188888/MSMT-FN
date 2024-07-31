@@ -5,8 +5,12 @@
 # /data/MOSI/wav/*
 # /data/SIMS/wav/*
 /data/*
+/test/*
 /checkpoint/*
 /temp
 /log
 /logs
 /Out
+/LLM/*
+/results
+/utils/__pycache__
