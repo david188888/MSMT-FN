@@ -290,7 +290,7 @@ class BottleneckFusion(nn.Module):
         with torch.no_grad():
             self.bottleneck.copy_(averaged_bottleneck)
 
-        return input_out_lang
+        return input_out_lang, input_out_audio
 
 
 class BertCrossattLayer(nn.Module):
@@ -401,8 +401,8 @@ class CMELayer(nn.Module):
         super().__init__()
         
         # The Bottleneck Fusion Layer
-        self.audio_bottleneck_fusion = BottleneckFusion(config)
-        self.lang_bottleneck_fusion = BottleneckFusion(config)
+        self.bottleneck = BottleneckFusion(config)
+
         
         # The cross-attention Layer
         self.audio_attention = BertCrossattLayer(config)
@@ -420,9 +420,8 @@ class CMELayer(nn.Module):
 
         
         
-    def bottleneck_fusion(self, lang_input, audio_input,lang_attention_mask,audio_attention_mask):
-        audio_output = self.audio_bottleneck_fusion(audio_input,audio_attention_mask)
-        lang_output = self.lang_bottleneck_fusion(lang_input,lang_attention_mask)
+    def bottleneck_fusion(self, lang_input, lang_attention_mask,audio_input,audio_attention_mask):
+        lang_output, audio_output = self.bottleneck(lang_input, lang_attention_mask,audio_input,audio_attention_mask)
         return lang_output, audio_output
     
     def cross_att(self, lang_input, lang_attention_mask, audio_input, audio_attention_mask):
@@ -459,9 +458,7 @@ class CMELayer(nn.Module):
         audio_att_output = audio_feats
     
         
-        lang_att_output = self.audio_bottleneck_fusion(lang_att_output, lang_attention_mask, audio_att_output, audio_attention_mask)
-        audio_att_output = self.lang_bottleneck_fusion(audio_att_output, audio_attention_mask, lang_att_output, lang_attention_mask)
-        
+        lang_att_output, audio_att_output = self.bottleneck_fusion(lang_att_output, lang_attention_mask, audio_att_output, audio_attention_mask)
         print(f"the shape of lang_att_output is :{lang_att_output.size()}")
         print(f"the shape of audio_att_output is :{audio_att_output.size()}")
         # print("finish lang bottleneck")
