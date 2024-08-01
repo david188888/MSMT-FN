@@ -168,10 +168,17 @@ class rob_hub_cme(nn.Module):
         # print(f"shape of A_hidden_states: {A_hidden_states.shape}")
         text_inputs, text_attn_mask = self.prepend_cls(t_hidden, text_mask, 'text') # add cls token
         audio_inputs, audio_attn_mask = self.prepend_cls(a_hidden, audio_mask_new, 'audio') # add cls token
-        # print(f"shape of audio_inputs: {audio_inputs.shape}")
-        # print(f"shape of audio_attn_mask: {audio_attn_mask.shape}")
-        # print(f"shape of text_inputs: {text_inputs.shape}")
-        # print(f"shape of text_attn_mask: {text_attn_mask.shape}")
+        print(f"shape of audio_inputs: {audio_inputs.shape}")
+        print(f"shape of audio_attn_mask: {audio_attn_mask.shape}")
+        print(f"shape of text_inputs: {text_inputs.shape}")
+        print(f"shape of text_attn_mask: {text_attn_mask.shape}")
+        
+        
+        # change the shape of text_inputs and audio_inputs and text_attn_mask and audio_attn_mask
+        text_inputs = text_inputs.view(text_inputs.shape[0]*text_inputs.shape[1], text_inputs.shape[2], text_inputs.shape[3])
+        audio_inputs = audio_inputs.view(audio_inputs.shape[0]*audio_inputs.shape[1], audio_inputs.shape[2], audio_inputs.shape[3])
+        text_attn_mask = text_attn_mask.view(text_attn_mask.shape[0]*text_attn_mask.shape[1], text_attn_mask.shape[2])
+        audio_attn_mask = audio_attn_mask.view(audio_attn_mask.shape[0]*audio_attn_mask.shape[1], audio_attn_mask.shape[2])
 
         # position encoding
         # pos_enc_text = Summer(PositionalEncodingPermute1D(text_inputs.shape[1]))

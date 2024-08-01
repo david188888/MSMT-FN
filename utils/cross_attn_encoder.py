@@ -114,8 +114,6 @@ class BertAttention(nn.Module):
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads))
         self.num_attention_heads = config.num_attention_heads
-        self.use_bottleneck = config.use_bottleneck
-        self.n_bottlenecks = config.n_bottlenecks
         self.attention_head_size = int(
             config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -138,6 +136,7 @@ class BertAttention(nn.Module):
 
     def forward(self, hidden_states, context, attention_mask=None):
         # print(context.size(),attention_mask.size())
+        
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(context)
         mixed_value_layer = self.value(context)
@@ -154,6 +153,7 @@ class BertAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(
             query_layer, key_layer.transpose(-1, -2))  # shape is (b, h, s_q, s_k)
+
         if self.add_abs_pos_emb:
             attention_pos_scores = torch.matmul(
                 query_layer+pos_emb_q, pos_emb.transpose(-1, -2))
@@ -162,6 +162,7 @@ class BertAttention(nn.Module):
         else:
             attention_scores = attention_scores / \
                 math.sqrt(self.attention_head_size)
+                
 
         # Apply the attention mask
         if attention_mask is not None:
@@ -212,31 +213,32 @@ class BottleneckFusion(nn.Module):
         super(BottleneckFusion, self).__init__()
         self.use_bottleneck = config.use_bottleneck
         self.n_bottlenecks = 4
-        self.cross_attn = BertCrossattLayer(config)
+        self.self_attn = BertSelfattLayer(config)
         self.output = BertAttOutput(config)
-        self.bottle = []
         if self.use_bottleneck:
             self.bottleneck = nn.Parameter(torch.randn(
-                1, self.n_bottlenecks, config.hidden_size) * 0.02)
+                1,self.n_bottlenecks, config.hidden_size) * 0.02)
 
-    def forward(self, lang_input,lang_attention_mask, audio_input, audio_attention_mask):
-
+    def forward(self, lang_input ,lang_attention_mask, audio_input, audio_attention_mask):
+        print(f"start the forward")
+        bottle = []
         t_mod_lang = lang_input.size(1)
         t_mod_audio = audio_input.size(1)
-
-        in_mod_lang = torch.cat([lang_input, self.bottleneck.expand(
-            lang_input.size(0), -1, -1)], dim=1)
-        # print(f"in_mod_lang: {in_mod_lang.size()}")
-        # print(f"lang_input: {lang_input.size()}")
-        # print(f"botteleneck_lang: {(self.bottleneck.expand(lang_input.size(0), -1, -1)).size()}")
         
-        # print(f"audio_input: {audio_input.size()}")
-        # print(f"botteleneck_lang: {(self.bottleneck.expand(audio_input.size(0), -1, -1)).size()}")
-
+        expanded_bottleneck = self.bottleneck.expand(
+            lang_input.size(0), -1, -1)
         
-        in_mod_audio = torch.cat([audio_input, self.bottleneck.expand(
-            audio_input.size(0), -1, -1)], dim=1)
-        # print(f"in_mod: {in_mod.size()}")
+        in_mod_lang = torch.cat([lang_input, expanded_bottleneck], dim=1)
+        
+        in_mod_audio = torch.cat([audio_input, expanded_bottleneck], dim=1)
+    
+        print(f"lang_input: {lang_input.size()}")
+        print(f"shape of in_mod_lang: {in_mod_lang.size()}")        
+        
+
+
+        print(f"audio_input: {audio_input.size()}")
+        print(f"shape of in_mod_audio: {in_mod_audio.size()}")
        
         if lang_attention_mask.size(1) < in_mod_lang.size(1):
             pad_length = in_mod_lang.size(1) - lang_attention_mask.size(1)
@@ -250,11 +252,23 @@ class BottleneckFusion(nn.Module):
         else:
             new_attention_mask_audio = audio_attention_mask
 
-        # print(f"new attention_mask: {new_attention_mask.size()}")
-        out_mod_lang = self.cross_attn(in_mod_lang,in_mod_audio,ctx_att_mask=new_attention_mask_audio)
-        out_mod_audio = self.cross_attn(in_mod_audio,in_mod_lang,ctx_att_mask=new_attention_mask_lang)
-        output_lang = self.output(out_mod_lang, in_mod_lang)
+        print(f"new_attention_mask_lang: {new_attention_mask_lang.size()}")
+        print(f"new_attention_mask_audio: {new_attention_mask_audio.size()}")
+
+        
+        out_mod_lang = self.self_attn(in_mod_lang, new_attention_mask_lang)
+        output_lang = self.output(out_mod_lang, in_mod_lang)        
+
+        out_mod_audio = self.self_attn(in_mod_audio, new_attention_mask_audio)
         output_audio = self.output(out_mod_audio, in_mod_audio)
+
+        
+        print(f"out_mod_lang: {out_mod_lang.size()}")
+        print(f"out_mod_audio: {out_mod_audio.size()}")
+        
+
+        print(f"output_lang: {output_lang.size()}")
+        print(f"output_audio: {output_audio.size()}")
 
         input_out_lang = output_lang[:, :t_mod_lang]
         input_out_audio = output_audio[:, :t_mod_audio]
@@ -262,17 +276,19 @@ class BottleneckFusion(nn.Module):
         # print('----------')
         # print(out_mod.size())
         # print('-------------')
-        updated_bottleneck_lang = output_lang[:, t_mod_lang:]
-        updated_bottleneck_audio = output_audio[:, t_mod_audio:]
-        
-        self.bottle.append(updated_bottleneck_lang)
-        self.bottle.append(updated_bottleneck_audio)
+        updated_bottleneck_lang = output_lang[:, t_mod_lang:]        
+        bottle.append(updated_bottleneck_lang)
+        updated_bottleneck_audio = output_audio[:, t_mod_audio:]       
+        bottle.append(updated_bottleneck_audio)
 
-        stacked_bottle = torch.stack(self.bottle, dim=-1)
+        stacked_bottle = torch.stack(bottle, dim=-1)
         new_bottleneck = torch.mean(stacked_bottle, dim=-1)
+        averaged_bottleneck = new_bottleneck.mean(dim=0, keepdim=True)
         
+        print(f"the shape of new_bottleneck is :{averaged_bottleneck.size()}")
 
-        self.bottleneck = nn.Parameter(new_bottleneck)
+        with torch.no_grad():
+            self.bottleneck.copy_(averaged_bottleneck)
 
         return input_out_lang
 
