@@ -36,12 +36,17 @@ class rob_hub_cme(nn.Module):
 
         # position encoding
         #self.pos_enc = Summer(PositionalEncoding1D(768))
+        
 
         # CME layers
         Bert_config = BertConfig(num_hidden_layers=config.num_hidden_layers)
         self.CME_layers = nn.ModuleList(
             [CMELayer(Bert_config) for _ in range(Bert_config.num_hidden_layers)]
         )
+        if Bert_config.use_bottleneck:
+            self.bottleneck = nn.Parameter(torch.randn(
+                1, Bert_config.n_bottlenecks, Bert_config.hidden_size) * 0.02)
+
         
         # GRU_config = GruConfig(hidden_size=config.hidden_size, num_layers=config.num_layers)
         # self.GRU_layers = nn.ModuleList(
@@ -94,7 +99,7 @@ class rob_hub_cme(nn.Module):
         return outputs, masks
     
     def forward(self, text_inputs, text_mask, audio_inputs, audio_mask):
-
+        self.bottle = []
         # text feature extraction
         t_output = torch.zeros(text_inputs.shape[0], text_inputs.shape[1], 768).to(device)
         t_hidden = torch.zeros(text_inputs.shape[0], text_inputs.shape[1], text_inputs.shape[2], 768).to(device)
@@ -185,16 +190,25 @@ class rob_hub_cme(nn.Module):
         # text_inputs = pos_enc_text(text_inputs)
         # pos_enc_audio = Summer(PositionalEncodingPermute1D(audio_inputs.shape[1]))
         # audio_inputs = pos_enc_audio(audio_inputs)
+        
+
 
         # pass through CME layers
+        expanded_bottleneck = self.bottleneck.expand(text_inputs.size(0), -1, -1)
         for layer_module in self.CME_layers:
-            text_inputs, audio_inputs = layer_module(text_inputs, text_attn_mask,
-                                                audio_inputs, audio_attn_mask)
+            text_inputs, audio_inputs, lang_bottleneck, audio_bottleneck = layer_module(text_inputs, text_attn_mask,
+                                                audio_inputs, audio_attn_mask, expanded_bottleneck)
+            self.bottle.append(lang_bottleneck)
+            self.bottle.append(audio_bottleneck)
+            stacked_bottle = torch.stack(self.bottle, dim=-1)
+            new_bottleneck = torch.mean(stacked_bottle, dim=-1)
+            self.bottleneck = nn.Parameter(new_bottleneck)
             
-        # print(f"shape of text_inputs: {text_inputs.shape}")
-        # print(f"shape of audio_inputs: {audio_inputs.shape}")
-        # print(f"shape of text_attn_mask: {text_attn_mask.shape}")
-        # print(f"shape of audio_attn_mask: {audio_attn_mask.shape}")
+            
+        print(f"shape of text_inputs: {text_inputs.shape}")
+        print(f"shape of audio_inputs: {audio_inputs.shape}")
+        print(f"shape of text_attn_mask: {text_attn_mask.shape}")
+        print(f"shape of audio_attn_mask: {audio_attn_mask.shape}")
             # concatenate original features with fused features
             
             

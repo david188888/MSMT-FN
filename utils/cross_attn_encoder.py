@@ -211,34 +211,17 @@ class BertAttOutput(nn.Module):
 class BottleneckFusion(nn.Module):
     def __init__(self, config):
         super(BottleneckFusion, self).__init__()
-        self.use_bottleneck = config.use_bottleneck
-        self.n_bottlenecks = 4
         self.self_attn = BertSelfattLayer(config)
         self.output = BertAttOutput(config)
-        if self.use_bottleneck:
-            self.bottleneck = nn.Parameter(torch.randn(
-                1,self.n_bottlenecks, config.hidden_size) * 0.02)
 
-    def forward(self, lang_input ,lang_attention_mask, audio_input, audio_attention_mask):
-        print(f"start the forward")
-        bottle = []
+
+    def forward(self, lang_input ,lang_attention_mask, audio_input, audio_attention_mask, bottleneck):
         t_mod_lang = lang_input.size(1)
         t_mod_audio = audio_input.size(1)
         
-        expanded_bottleneck = self.bottleneck.expand(
-            lang_input.size(0), -1, -1)
-        
-        in_mod_lang = torch.cat([lang_input, expanded_bottleneck], dim=1)
-        
-        in_mod_audio = torch.cat([audio_input, expanded_bottleneck], dim=1)
+        in_mod_lang = torch.cat([lang_input, bottleneck], dim=1)
+        in_mod_audio = torch.cat([audio_input, bottleneck], dim=1)
     
-        print(f"lang_input: {lang_input.size()}")
-        print(f"shape of in_mod_lang: {in_mod_lang.size()}")        
-        
-
-
-        print(f"audio_input: {audio_input.size()}")
-        print(f"shape of in_mod_audio: {in_mod_audio.size()}")
        
         if lang_attention_mask.size(1) < in_mod_lang.size(1):
             pad_length = in_mod_lang.size(1) - lang_attention_mask.size(1)
@@ -252,8 +235,6 @@ class BottleneckFusion(nn.Module):
         else:
             new_attention_mask_audio = audio_attention_mask
 
-        print(f"new_attention_mask_lang: {new_attention_mask_lang.size()}")
-        print(f"new_attention_mask_audio: {new_attention_mask_audio.size()}")
 
         
         out_mod_lang = self.self_attn(in_mod_lang, new_attention_mask_lang)
@@ -262,35 +243,13 @@ class BottleneckFusion(nn.Module):
         out_mod_audio = self.self_attn(in_mod_audio, new_attention_mask_audio)
         output_audio = self.output(out_mod_audio, in_mod_audio)
 
-        
-        print(f"out_mod_lang: {out_mod_lang.size()}")
-        print(f"out_mod_audio: {out_mod_audio.size()}")
-        
-
-        print(f"output_lang: {output_lang.size()}")
-        print(f"output_audio: {output_audio.size()}")
 
         input_out_lang = output_lang[:, :t_mod_lang]
         input_out_audio = output_audio[:, :t_mod_audio]
-        # print(f"input_tensor_out: {input_tensor_out.size()}")
-        # print('----------')
-        # print(out_mod.size())
-        # print('-------------')
         updated_bottleneck_lang = output_lang[:, t_mod_lang:]        
-        bottle.append(updated_bottleneck_lang)
         updated_bottleneck_audio = output_audio[:, t_mod_audio:]       
-        bottle.append(updated_bottleneck_audio)
 
-        stacked_bottle = torch.stack(bottle, dim=-1)
-        new_bottleneck = torch.mean(stacked_bottle, dim=-1)
-        averaged_bottleneck = new_bottleneck.mean(dim=0, keepdim=True)
-        
-        print(f"the shape of new_bottleneck is :{averaged_bottleneck.size()}")
-
-        with torch.no_grad():
-            self.bottleneck.copy_(averaged_bottleneck)
-
-        return input_out_lang, input_out_audio
+        return input_out_lang, input_out_audio, updated_bottleneck_lang, updated_bottleneck_audio
 
 
 class BertCrossattLayer(nn.Module):
@@ -401,7 +360,7 @@ class CMELayer(nn.Module):
         super().__init__()
         
         # The Bottleneck Fusion Layer
-        self.bottleneck = BottleneckFusion(config)
+        self.bottleneckfusion = BottleneckFusion(config)
 
         
         # The cross-attention Layer
@@ -420,9 +379,9 @@ class CMELayer(nn.Module):
 
         
         
-    def bottleneck_fusion(self, lang_input, lang_attention_mask,audio_input,audio_attention_mask):
-        lang_output, audio_output = self.bottleneck(lang_input, lang_attention_mask,audio_input,audio_attention_mask)
-        return lang_output, audio_output
+    def bottleneck_fusion(self, lang_input, lang_attention_mask,audio_input,audio_attention_mask, bottleneck):
+        lang_output, audio_output, lang_bottleneck, audio_bottleneck = self.bottleneckfusion(lang_input, lang_attention_mask,audio_input,audio_attention_mask, bottleneck)
+        return lang_output, audio_output,lang_bottleneck, audio_bottleneck
     
     def cross_att(self, lang_input, lang_attention_mask, audio_input, audio_attention_mask):
         # Cross Attention
@@ -452,16 +411,14 @@ class CMELayer(nn.Module):
 
 
     def forward(self, lang_feats, lang_attention_mask,
-                audio_feats, audio_attention_mask):
+                audio_feats, audio_attention_mask, bottleneck):
 
         lang_att_output = lang_feats
         audio_att_output = audio_feats
     
         
-        lang_att_output, audio_att_output = self.bottleneck_fusion(lang_att_output, lang_attention_mask, audio_att_output, audio_attention_mask)
-        print(f"the shape of lang_att_output is :{lang_att_output.size()}")
-        print(f"the shape of audio_att_output is :{audio_att_output.size()}")
-        # print("finish lang bottleneck")
+        lang_att_output, audio_att_output, lang_bottleneck, audio_bottleneck = self.bottleneck_fusion(lang_att_output, lang_attention_mask, audio_att_output, audio_attention_mask, bottleneck)
+
         # lang_att_output, audio_att_output = self.cross_att(lang_att_output, lang_attention_mask,
         #                                                    audio_att_output, audio_attention_mask)
         lang_att_output, audio_att_output = self.self_att(lang_att_output, lang_attention_mask,
@@ -471,7 +428,7 @@ class CMELayer(nn.Module):
         
         # print(f"the shape of lang_output is :{lang_output.size()}")
 
-        return lang_output, audio_output
+        return lang_output, audio_output, lang_bottleneck, audio_bottleneck
 
 
 class GRULayer(nn.Module):

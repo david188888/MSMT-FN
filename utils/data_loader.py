@@ -73,7 +73,7 @@ class Dataset_audio_text(torch.utils.data.Dataset):
         # tokenize text
         tokenized_text = [self.tokenizer(
             str(self.texts[i]),
-            max_length=512,
+            max_length=96,
             padding="max_length",
             truncation=True,
             add_special_tokens=True,
