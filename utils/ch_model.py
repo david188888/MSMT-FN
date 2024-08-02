@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from transformers import RobertaModel, HubertModel, AutoModel
-from utils.cross_attn_encoder import CMELayer, BertConfig
+from utils.cross_attn_encoder import CMELayer, BertConfig, GRU_context, GruConfig
 # from positional_encodings.torch_encodings import PositionalEncodingPermute1D, Summer
 import torch.nn.functional as F
 
@@ -48,10 +48,10 @@ class rob_hub_cme(nn.Module):
                 1, Bert_config.n_bottlenecks, Bert_config.hidden_size) * 0.02)
 
         
-        # GRU_config = GruConfig(hidden_size=config.hidden_size, num_layers=config.num_layers)
-        # self.GRU_layers = nn.ModuleList(
-        #     [GRULayer(GRU_config) for _ in range(GRU_config.num_layers)]
-        # )
+        GRU_config = GruConfig(hidden_size=config.hidden_size, num_layers=config.num_layers)
+        self.GRU_layers = nn.ModuleList(
+            [GRU_context(GRU_config) for _ in range(GRU_config.num_layers)]
+        )
 
         # fused method V2
         self.text_mixed_layer = nn.Sequential(
@@ -134,7 +134,7 @@ class rob_hub_cme(nn.Module):
             a_attention.append(A_attention)
             
         # print(f"shape of a_features: {a_hidden.shape}")
-        ## average over unmasked audio tokens
+        # average over unmasked audio tokens
         # A_features = []
         audio_mask_idx_new = []
         for batch in range(A_hidden_states.shape[0]):
@@ -151,7 +151,7 @@ class rob_hub_cme(nn.Module):
                 # print(f"the dialog_audio_mask_idx_new: {dialog_audio_mask_idx_new}")
                         
             audio_mask_idx_new.append(dialog_audio_mask_idx_new)
-        #     truncated_feature = torch.mean(A_hidden_states[batch][:padding_idx],0) #Shape is [768]
+            truncated_feature = torch.mean(A_hidden_states[batch][:padding_idx],0) #Shape is [768]
         #     A_features.append(truncated_feature)
         # A_features = torch.stack(A_features,0).to(device)
 
@@ -173,6 +173,8 @@ class rob_hub_cme(nn.Module):
         # print(f"shape of A_hidden_states: {A_hidden_states.shape}")
         text_inputs, text_attn_mask = self.prepend_cls(t_hidden, text_mask, 'text') # add cls token
         audio_inputs, audio_attn_mask = self.prepend_cls(a_hidden, audio_mask_new, 'audio') # add cls token
+        batch_size = text_inputs.size(0)
+        dialog_len = text_inputs.size(1)
         print(f"shape of audio_inputs: {audio_inputs.shape}")
         print(f"shape of audio_attn_mask: {audio_attn_mask.shape}")
         print(f"shape of text_inputs: {text_inputs.shape}")
@@ -205,10 +207,37 @@ class rob_hub_cme(nn.Module):
             self.bottleneck = nn.Parameter(new_bottleneck)
             
             
+        text_inputs = text_inputs.view(batch_size, dialog_len, text_inputs.size(1), text_inputs.size(2))
+        text_attn_mask = text_attn_mask.view(batch_size, dialog_len, text_attn_mask.size(1))
+        audio_inputs = audio_inputs.view(batch_size, dialog_len, audio_inputs.size(1), audio_inputs.size(2))
+        audio_attn_mask = audio_attn_mask.view(batch_size, dialog_len, audio_attn_mask.size(1))
+        
+        text_inputs = text_inputs.mean(dim=2)
+        audio_inputs = audio_inputs.mean(dim=2)
+        
+            
+            
         print(f"shape of text_inputs: {text_inputs.shape}")
         print(f"shape of audio_inputs: {audio_inputs.shape}")
         print(f"shape of text_attn_mask: {text_attn_mask.shape}")
         print(f"shape of audio_attn_mask: {audio_attn_mask.shape}")
+        
+        
+        
+        
+        # pass through GRU layers
+        for i, layer_module in enumerate(self.GRU_layers):
+            # 判断是不是首次进入GRU，如果是初始化hidden
+            print(f'layer_module: {i}')
+            if i == 0:
+                hidden = layer_module.init_hidden(text_inputs.size(0))
+                
+            print(f"shape of text_inputs: {text_inputs.shape}")
+            print(f"shape of hidden: {hidden.shape}")
+            gru_output = layer_module(text_inputs, hidden)
+        
+        
+        print(f"shape of output: {gru_output.shape}")
             # concatenate original features with fused features
             
             

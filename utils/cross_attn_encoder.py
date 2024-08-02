@@ -55,22 +55,22 @@ class BertConfig(object):
         self.add_pos_enc = add_pos_enc
 
 
-# class GruConfig(object):
-#     def __init__(self,
-#                  input_dim=768,
-#                  num_layers=2,
-#                  bidirectional=True,
-#                  num_heads = 12,
-#                  dropout=0.3,
-#                  hidden_size=512,
-#                  output_size=300):
-#         self.input_dim = input_dim
-#         self.num_layers = num_layers
-#         self.bidirectional = bidirectional
-#         self.hidden_size = hidden_size
-#         self.output_size = output_size
-#         self.num_heads = num_heads
-#         self.dropout = 0.3
+class GruConfig(object):
+    def __init__(self,
+                 input_dim=768,
+                 num_layers=2,
+                 bidirectional=True,
+                 num_heads = 10,
+                 dropout=0.3,
+                 hidden_size=512,
+                 output_size=300):
+        self.input_dim = input_dim
+        self.num_layers = num_layers
+        self.bidirectional = bidirectional
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.num_heads = num_heads
+        self.dropout = 0.3
         
 
 BertLayerNorm = torch.nn.LayerNorm
@@ -331,29 +331,49 @@ class BertLayer(nn.Module):
 class GRU_context(nn.Module):
     def __init__(self, config):
         super(GRU_context, self).__init__()
-        self.input_dim = config.hidden_size
+        self.input_dim = config.input_dim
         self.hidden_size = config.hidden_size
         self.num_layers = config.num_layers
         self.output_size = config.output_size
         self.bidirectional = config.bidirectional
+        self.dropout = config.dropout
         self.n_directions = 2 if self.bidirectional else 1
         
         self.gru = nn.GRU(input_size = self.input_dim, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first = True, bidirectional = self.bidirectional)
-        self.fc1 = nn.Linear(self.hidden_size*self.n_directions, 300)
-        self.fc2 = nn.Linear(300, self.output_size)
+        self.fc1 = nn.Linear(self.input_dim*self.n_directions, 768)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(self.dropout)
+        self.fc2 = nn.Linear(768, self.output_size)
         
-    def init_hidden(self, config):
-        hidden = torch.zeros(self.num_layers*self.n_directions, config.batch_size, self.hidden_size)
+        self.multihead_att = nn.MultiheadAttention(self.output_size, config.num_heads, config.dropout, batch_first=True)
+
+        
+    def init_hidden(self, batch_size):
+        hidden = torch.zeros(self.num_layers*self.n_directions, batch_size, self.hidden_size)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         return hidden.to(device)
+    
     
     def forward(self, inputs, hidden):
         
         output, hidden = self.gru(inputs, hidden)
-                    
-        fc_output = self.fc1(output)
-        fc_output = self.fc2(output)
-        return fc_output
+        forward_hidden = hidden[-2, :, :]
+        backward_hidden = hidden[-1, :, :]
+        print(f"the shape of hidden is :{hidden.size()}")
+        print(f"the shape of forward_hidden is :{forward_hidden.size()}")
+        print(f"the shape of backward_hidden is :{backward_hidden.size()}")
+        concat_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
+        print(f"the shape of concat_hidden is :{concat_hidden.size()}")
+        fc_output_1 = self.fc1(concat_hidden)
+        fc_output_1 = self.relu(fc_output_1)
+        fc_output_1 = self.dropout(fc_output_1)
+        fc_output = self.fc2(fc_output_1)
+        print(f"the shape of fc_output is :{fc_output.size()}")
+        fc_output = fc_output.unsqueeze(1)
+        print(f"the shape of fc_output is :{fc_output.size()}")
+        attention_output, atteenion_weights = self.multihead_att(fc_output, fc_output, fc_output)
+        attention_output = attention_output.squeeze(1)
+        return attention_output
 
 class CMELayer(nn.Module):
     def __init__(self, config):
@@ -431,23 +451,6 @@ class CMELayer(nn.Module):
         return lang_output, audio_output, lang_bottleneck, audio_bottleneck
 
 
-class GRULayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        
-        # The GRU Context Layer
-        self.gru = GRU_context(config)
 
-        # The MultiHead Attention Layer
-        self.multihead_att = nn.MultiheadAttention(config.input_dim, config.num_heads, config.dropout, batch_first=True)
-        
-        
-    def forward(self, input, hidden):
-        gru_output = self.gru(input, hidden)
-        
-        # Multihead Attention
-        attention_output, atteenion_weights = self.multihead_att(gru_output, gru_output, gru_output)
-        
-        return attention_output
         
     
