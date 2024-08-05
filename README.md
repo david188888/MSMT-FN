@@ -11,8 +11,13 @@ ChConfig 里面制定的主要的参数
 ch_model 是主模型，cross_attn_encoder 定义了注意力机制模块 GRU模块和 Bottleneck模块
 
 
+## 数据集的路径已经在dataloader最下面定义好了
+
+
 ## 训练模型
 ```python
 python run.py
 ```
+
+
 
