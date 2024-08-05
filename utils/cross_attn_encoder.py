@@ -3,6 +3,7 @@ from torch import nn
 import math
 import sys
 import torch.nn.functional as F
+import gc
 
 class BertConfig(object):
     """Configuration class to store the configuration of a `BertModel`.
@@ -10,9 +11,9 @@ class BertConfig(object):
 
     def __init__(self,
                  use_bottleneck=True,
-                 n_bottlenecks=4,
+                 n_bottlenecks=3,
                  hidden_size=768,
-                 num_hidden_layers=3,
+                 num_hidden_layers=2,
                  num_attention_heads=12,
                  intermediate_size=3072,
                  hidden_act="relu",
@@ -62,7 +63,7 @@ class GruConfig(object):
                  bidirectional=True,
                  num_heads = 10,
                  dropout=0.3,
-                 hidden_size=512,
+                 hidden_size=128,
                  output_size=300):
         self.input_dim = input_dim
         self.num_layers = num_layers
@@ -183,7 +184,9 @@ class BertAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
+        del mixed_query_layer, mixed_key_layer, mixed_value_layer, query_layer, key_layer, attention_scores, attention_mask
+        gc.collect()
+        torch.cuda.empty_cache()
         context_layer = torch.matmul(
             attention_probs, value_layer)  # shape is (b, h, s_q, d)
         context_layer = context_layer.permute(
@@ -247,7 +250,9 @@ class BottleneckFusion(nn.Module):
         input_out_lang = output_lang[:, :t_mod_lang]
         input_out_audio = output_audio[:, :t_mod_audio]
         updated_bottleneck_lang = output_lang[:, t_mod_lang:]        
-        updated_bottleneck_audio = output_audio[:, t_mod_audio:]       
+        updated_bottleneck_audio = output_audio[:, t_mod_audio:]
+        del in_mod_lang, in_mod_audio, out_mod_lang, out_mod_audio, output_lang, output_audio
+        torch.cuda.empty_cache()  
 
         return input_out_lang, input_out_audio, updated_bottleneck_lang, updated_bottleneck_audio
 
@@ -273,7 +278,7 @@ class BertSelfattLayer(nn.Module):
     def forward(self, input_tensor, attention_mask):
         # Self attention attends to itself, thus keys and querys are the same (input_tensor).
 
-        self_output = self.self(input_tensor, input_tensor, attention_mask)
+        self_output = self.self(input_tensor, input_tensor, attention_mask=attention_mask)
         attention_output = self.output(self_output, input_tensor)
 
         return attention_output
@@ -328,6 +333,7 @@ class BertLayer(nn.Module):
 ---------------------------------------------------------------------------------------
 """
 
+    
 class GRU_context(nn.Module):
     def __init__(self, config):
         super(GRU_context, self).__init__()
@@ -340,40 +346,26 @@ class GRU_context(nn.Module):
         self.n_directions = 2 if self.bidirectional else 1
         
         self.gru = nn.GRU(input_size = self.input_dim, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first = True, bidirectional = self.bidirectional)
-        self.fc1 = nn.Linear(self.input_dim*self.n_directions, 768)
+        self.fc1 = nn.Linear(self.hidden_size*self.n_directions, 768)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(self.dropout)
-        self.fc2 = nn.Linear(768, self.output_size)
+        # self.fc2 = nn.Linear(768, self.output_size)
         
-        self.multihead_att = nn.MultiheadAttention(self.output_size, config.num_heads, config.dropout, batch_first=True)
-
-        
-    def init_hidden(self, batch_size):
-        hidden = torch.zeros(self.num_layers*self.n_directions, batch_size, self.hidden_size)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        return hidden.to(device)
     
-    
-    def forward(self, inputs, hidden):
-        
-        output, hidden = self.gru(inputs, hidden)
+    def forward(self, inputs):
+        # print(self.input_dim)
+        output, hidden = self.gru(inputs)
+        # print(f"the shape of hidden is :{hidden.size()}")
         forward_hidden = hidden[-2, :, :]
         backward_hidden = hidden[-1, :, :]
-        print(f"the shape of hidden is :{hidden.size()}")
-        print(f"the shape of forward_hidden is :{forward_hidden.size()}")
-        print(f"the shape of backward_hidden is :{backward_hidden.size()}")
         concat_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
-        print(f"the shape of concat_hidden is :{concat_hidden.size()}")
+        # print(f"the shape of concat_hidden is :{concat_hidden.size()}")
         fc_output_1 = self.fc1(concat_hidden)
         fc_output_1 = self.relu(fc_output_1)
         fc_output_1 = self.dropout(fc_output_1)
-        fc_output = self.fc2(fc_output_1)
-        print(f"the shape of fc_output is :{fc_output.size()}")
-        fc_output = fc_output.unsqueeze(1)
-        print(f"the shape of fc_output is :{fc_output.size()}")
-        attention_output, atteenion_weights = self.multihead_att(fc_output, fc_output, fc_output)
-        attention_output = attention_output.squeeze(1)
-        return attention_output
+        # fc_output = self.fc2(fc_output_1)
+        # print(f"the shape of fc_output is :{fc_output_1.size()}")
+        return fc_output_1
 
 class CMELayer(nn.Module):
     def __init__(self, config):
@@ -411,22 +403,19 @@ class CMELayer(nn.Module):
             audio_input, lang_input, ctx_att_mask=lang_attention_mask)
         return lang_att_output, audio_att_output
 
-    def self_att(self, lang_input, lang_attention_mask, audio_input, audio_attention_mask):
+    def self_att(self, lang_input, lang_attention_mask):
         # Self Attention
         lang_att_output = self.lang_self_att(lang_input, lang_attention_mask)
-        audio_att_output = self.audio_self_att(
-            audio_input, audio_attention_mask)
-        return lang_att_output, audio_att_output
+        return lang_att_output
 
-    def output_fc(self, lang_input, audio_input):
+    def output_fc(self, lang_input):
         # FC layers
         lang_inter_output = self.lang_inter(lang_input)
-        audio_inter_output = self.audio_inter(audio_input)
+
 
         # Layer output
         lang_output = self.lang_output(lang_inter_output, lang_input)
-        audio_output = self.audio_output(audio_inter_output, audio_input)
-        return lang_output, audio_output
+        return lang_output
     
 
 
@@ -441,14 +430,18 @@ class CMELayer(nn.Module):
 
         # lang_att_output, audio_att_output = self.cross_att(lang_att_output, lang_attention_mask,
         #                                                    audio_att_output, audio_attention_mask)
-        lang_att_output, audio_att_output = self.self_att(lang_att_output, lang_attention_mask,
-                                                          audio_att_output, audio_attention_mask)
-        lang_output, audio_output = self.output_fc(
-            lang_att_output, audio_att_output)
+        lang_att_output = self.self_att(lang_att_output, lang_attention_mask)
+        audio_att_output = self.self_att(audio_att_output, audio_attention_mask)
+        
+        lang_output = self.output_fc(
+            lang_att_output)
+        
+        audio_output = self.output_fc(
+            audio_att_output)
         
         # print(f"the shape of lang_output is :{lang_output.size()}")
 
-        return lang_output, audio_output, lang_bottleneck, audio_bottleneck
+        return lang_output, audio_output ,lang_bottleneck, audio_bottleneck
 
 
 

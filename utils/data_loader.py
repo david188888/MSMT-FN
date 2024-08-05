@@ -67,6 +67,7 @@ class Dataset_audio_text(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         phone = list(self.phone_groups.indices.keys())[index]
+        # print(f"the phone is {phone}")
         indeces = self.phone_groups.indices[phone]
         # print(f"the indeces is {indeces}")
         # extract text feature
@@ -148,18 +149,26 @@ def collate_fn(batch):
     # print(f"size of audio_inputs: {len(audio_inputs), len(audio_inputs[0]), len(audio_inputs[0][0])}")
     # print(f"targets_M: {targets_M}")
     
-    text_tokens = [torch.tensor(tt, dtype=torch.long) for tt in text_tokens]
-    text_masks = [torch.tensor(tm, dtype=torch.long) for tm in text_masks]
-    audio_inputs = [torch.tensor(ai) for ai in audio_inputs]
-    audio_masks = [torch.tensor(am) for am in audio_masks]
+    text_tokens = torch.nn.utils.rnn.pad_sequence([tt.clone().detach().to(dtype=torch.long) for tt in text_tokens], batch_first=True)
+    text_masks = torch.nn.utils.rnn.pad_sequence([tm.clone().detach().to(dtype=torch.long) for tm in text_masks],batch_first=True)
+    audio_inputs = torch.nn.utils.rnn.pad_sequence([ai.clone().detach() for ai in audio_inputs], batch_first=True)
+    audio_masks = torch.nn.utils.rnn.pad_sequence([am.clone().detach() for am in audio_masks],batch_first=True)
+    
+    
+    text_inputs = text_tokens.view(text_tokens.size(0)*text_tokens.size(1), text_tokens.size(2))
+    text_masks = text_masks.view(text_masks.size(0)*text_masks.size(1), text_masks.size(2))
+    audio_inputs = audio_inputs.view(audio_inputs.size(0)*audio_inputs.size(1), audio_inputs.size(2))
+    audio_masks = audio_masks.view(audio_masks.size(0)*audio_masks.size(1), audio_masks.size(2))
+
+    
 
     return {
         # text
-        "text_tokens": torch.nn.utils.rnn.pad_sequence(text_tokens, batch_first=True),
-        "text_masks": torch.nn.utils.rnn.pad_sequence(text_masks, batch_first=True),
+        "text_tokens": text_inputs,
+        "text_masks": text_masks,
         # audio
-        "audio_inputs": torch.nn.utils.rnn.pad_sequence(audio_inputs, batch_first=True),
-        "audio_masks": torch.nn.utils.rnn.pad_sequence(audio_masks, batch_first=True),
+        "audio_inputs": audio_inputs,
+        "audio_masks": audio_masks,
         # labels
         "targets": 
             torch.tensor(targets_M, dtype=torch.float32),

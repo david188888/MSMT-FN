@@ -42,13 +42,6 @@ class ChConfig(object):
 
     def __init__(self,
                  train_mode='regression',
-                 loss_weights={
-                     'M': 1,
-                     'T': 1,
-                     'A': 1,
-                     'V': 1,
-
-                 },
                  model_save_path='checkpoint/',
                  learning_rate=1e-5,
                  epochs=30,
@@ -60,15 +53,13 @@ class ChConfig(object):
                  audio_feature='raw',
                  batch_size=2,
                  cme_version='v3',
-                 tasks='MTA',
                  num_hidden_layers=3,
                  scheduler_type = 'fixed',
-                 hidden_size = 50,
-                 num_layers = 2
+                 num_layers_gru = 2,
+                 hidden_size_gru = 156
                  ):
 
         self.train_mode = train_mode
-        self.loss_weights = loss_weights
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.dataset_name = dataset_name
@@ -80,18 +71,16 @@ class ChConfig(object):
         self.audio_feature = audio_feature
         self.batch_size = batch_size
         self.cme_version = cme_version
-        self.tasks = tasks
         self.num_hidden_layers = num_hidden_layers
         self.scheduler_type = scheduler_type
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
+        self.num_layers_gru = num_layers_gru
+        self.hidden_size_gru = hidden_size_gru
 
 
 class ChTrainer():
     def __init__(self, config):
 
         self.config = config
-        self.tasks = config.tasks
         self.criterion = nn.CrossEntropyLoss()
         self.metrics = MetricsTop(
             config.train_mode).getMetics(config.dataset_name)
@@ -116,39 +105,41 @@ class ChTrainer():
         total_steps = len(data_loader) * large_epoch
         # scheduler = get_linear_schedule_with_warmup(
         #     optimizer, num_warmup_steps=0.1*total_steps, num_training_steps=total_steps)
-        train_loss = {
-            'M': 0,
-        }
         total_loss = 0
+        accumulation_steps = 4  # 每两个 batch 进行一次反向传播
         input_size = 0
         # Loop over all batches.
-        for batch in tqdm(data_loader):
+        for i, batch in enumerate(tqdm(data_loader)):
             text_inputs = batch["text_tokens"].to(device)
             audio_inputs = batch["audio_inputs"].to(device)
             text_mask = batch["text_masks"].to(device)
             audio_mask = batch["audio_masks"].to(device)
             targets = batch["targets"]
+            
+            
+            # print(f"text_inputs shape is {text_inputs.shape}")
+            # print(f"audio_inputs shape is {audio_inputs.shape}")
 
             # To zero out the gradients.
             optimizer.zero_grad()
-
-            outputs = model(text_inputs, text_mask, audio_inputs, audio_mask)
-
+            batch_size = self.config.batch_size
+            outputs = model(text_inputs, text_mask, audio_inputs, audio_mask, batch_size)
             # Compute the training loss.
             loss = 0.0
-
-            m = self.tasks[0]
             # print(type(outputs))
             # print(f"outputs fused output: {outputs}")
-            sub_loss = self.config.loss_weights[m] * self.criterion(
+            loss = self.criterion(
                 outputs, targets.long().to(device).view(-1))
-            loss += sub_loss
-
-            total_loss += loss.item()*text_inputs.size(0)
-            input_size += text_inputs.size(0)
-
+            
             loss.backward()
-            optimizer.step()
+            if i % accumulation_steps == 0:
+                optimizer.step()
+            
+            total_loss += float(loss.item())*float(text_inputs.size(0))
+            input_size += float(text_inputs.size(0))
+            final_loss = round(total_loss / input_size, 4)
+        return final_loss
+
             # scheduler.step()
 
     # def do_train(self, model, data_loader):
@@ -207,12 +198,9 @@ class ChTrainer():
 
     def do_test(self, model, data_loader, mode):
         model.eval()
-        y_pred = {'M': []}
-        y_true = {'M': []}
+        y_pred = []
+        y_true = []
         total_loss = 0
-        val_loss = {
-            'M': 0,
-        }
         input_size = 0
         with torch.no_grad():
             # Loop over all batches.
@@ -230,19 +218,17 @@ class ChTrainer():
 
                 # Compute the training loss.
                 loss = 0.0
-                m = self.tasks[0]
-                sub_loss = self.config.loss_weights[m] * self.criterion(
+                loss = self.criterion(
                     outputs, targets.long().to(device).view(-1))
-                loss += sub_loss
-                val_loss[m] += sub_loss.item()*text_inputs.size(0)
-                total_loss += loss.item()*text_inputs.size(0)
+                val_loss += float(loss.item()*text_inputs.size(0))
+                total_loss += float(loss.item()*text_inputs.size(0))
                 input_size += text_inputs.size(0)
 
                 # add predictions
-                y_pred[m].append(outputs.cpu())
-                y_true[m].append(targets.cpu())
+                y_pred.append(outputs.cpu())
+                y_true.append(targets.cpu())
 
-        val_loss[m] = round(val_loss[m] / input_size, 4)
+        val_loss = round(val_loss / input_size, 4)
 
         total_loss = round(total_loss / input_size, 4)
         print(mode+" >> loss: ", total_loss, "   M_loss: ", val_loss['M'])
@@ -253,10 +239,8 @@ class ChTrainer():
         # print(f"y_pred shape is {pred.shape}, y_true shape is {true.shape}")
         
         results = self.metrics(pred, true)
-        print('%s: >> ' % (m) + dict_to_str(results))
-        eval_results[m] = results
-
-        eval_results = eval_results[self.tasks[0]]
+        print('%s: >> ' %  + dict_to_str(results))
+        eval_results['M_result'] = results
         eval_results['Loss'] = total_loss
         
                 
