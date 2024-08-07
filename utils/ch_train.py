@@ -41,40 +41,34 @@ class ChConfig(object):
     """
 
     def __init__(self,
-                 train_mode='regression',
                  model_save_path='checkpoint/',
                  learning_rate=1e-5,
                  epochs=30,
-                 dataset_name='sims',
                  early_stop=8,
+                 dropout=0.1,
                  seed=42,
-                 dropout=0.3,
-                 model='cme',
-                 audio_feature='raw',
                  batch_size=2,
-                 cme_version='v3',
                  num_hidden_layers=3,
+                 bottleneck_layers = 2,
                  scheduler_type = 'fixed',
                  num_layers_gru = 2,
-                 hidden_size_gru = 156
+                 hidden_size_gru = 156,
+                 use_regularization = 'L2'
                  ):
 
-        self.train_mode = train_mode
         self.learning_rate = learning_rate
         self.epochs = epochs
-        self.dataset_name = dataset_name
+        self.dropout = dropout
         self.model_save_path = model_save_path
         self.early_stop = early_stop
         self.seed = seed
-        self.dropout = dropout
-        self.model = model
-        self.audio_feature = audio_feature
         self.batch_size = batch_size
-        self.cme_version = cme_version
         self.num_hidden_layers = num_hidden_layers
+        self.bottleneck_layers = bottleneck_layers
         self.scheduler_type = scheduler_type
         self.num_layers_gru = num_layers_gru
         self.hidden_size_gru = hidden_size_gru
+        self.use_regularization = use_regularization
 
 
 class ChTrainer():
@@ -82,8 +76,7 @@ class ChTrainer():
 
         self.config = config
         self.criterion = nn.CrossEntropyLoss()
-        self.metrics = MetricsTop(
-            config.train_mode).getMetics(config.dataset_name)
+        self.metrics = MetricsTop().getMetics()
         self.scheduler_type = config.scheduler_type
         
     
@@ -106,7 +99,6 @@ class ChTrainer():
         # scheduler = get_linear_schedule_with_warmup(
         #     optimizer, num_warmup_steps=0.1*total_steps, num_training_steps=total_steps)
         total_loss = 0
-        accumulation_steps = 4  # 每两个 batch 进行一次反向传播
         input_size = 0
         # Loop over all batches.
         for i, batch in enumerate(tqdm(data_loader)):
@@ -115,10 +107,6 @@ class ChTrainer():
             text_mask = batch["text_masks"].to(device)
             audio_mask = batch["audio_masks"].to(device)
             targets = batch["targets"]
-            
-            
-            # print(f"text_inputs shape is {text_inputs.shape}")
-            # print(f"audio_inputs shape is {audio_inputs.shape}")
 
             # To zero out the gradients.
             optimizer.zero_grad()
@@ -126,75 +114,33 @@ class ChTrainer():
             outputs = model(text_inputs, text_mask, audio_inputs, audio_mask, batch_size)
             # Compute the training loss.
             loss = 0.0
-            # print(type(outputs))
-            # print(f"outputs fused output: {outputs}")
             loss = self.criterion(
                 outputs, targets.long().to(device).view(-1))
             
-            loss.backward()
-            if i % accumulation_steps == 0:
-                optimizer.step()
+            # 实现L1正则化
+            if self.config.use_regularization == 'L1':
+                l1_weight = 0.5
+                l1_regularization = l1_weight * sum(param.abs().sum() for param in model.parameters())
+                loss += l1_regularization
+                
+                
+            elif self.config.use_regularization == 'L2':
+                l2_weight = 0.5
+                l2_regularization = l2_weight * sum(param.pow(2).sum() for param in model.parameters())
+                loss += l2_regularization
+                
+            else:
+                pass
+
             
-            total_loss += float(loss.item())*float(text_inputs.size(0))
-            input_size += float(text_inputs.size(0))
+            loss.backward()
+            optimizer.step()           
+            total_loss += loss.item()*text_inputs.size(0)
+            input_size += text_inputs.size(0)
             final_loss = round(total_loss / input_size, 4)
         return final_loss
 
             # scheduler.step()
-
-    # def do_train(self, model, data_loader):
-    #     model.train()
-    #     optimizer = torch.optim.AdamW(
-    #         model.parameters(), lr=self.config.learning_rate)
-    #     train_loss = {
-    #         'M': 0,
-    #     }
-    #     total_loss = 0
-    #     input_size = 0
-    #     accumulation_steps = 2  # 每两个 batch 进行一次反向传播
-    #     # Loop over all batches.
-    #     for i, batch in enumerate(tqdm(data_loader)):
-    #         text_inputs = batch["text_tokens"].to(device)
-    #         audio_inputs = batch["audio_inputs"].to(device)
-    #         text_mask = batch["text_masks"].to(device)
-    #         audio_mask = batch["audio_masks"].to(device)
-    #         targets = batch["targets"]
-
-    #         # To zero out the gradients.
-    #         if i % accumulation_steps == 0:
-    #             optimizer.zero_grad()
-
-    #         outputs = model(text_inputs, text_mask, audio_inputs, audio_mask)
-
-    #         # Compute the training loss.
-    #         loss = 0.0
-
-    #         m = self.tasks[0]
-    #         sub_loss = self.config.loss_weights[m] * self.criterion(
-    #             outputs[m], targets[m].to(device).view(-1, 1))
-    #         loss += sub_loss / accumulation_steps  # 累积损失
-
-    #         total_loss += loss.item() * text_inputs.size(0)
-    #         input_size += text_inputs.size(0)
-
-    #         loss.backward()
-
-    #         # 每 accumulation_steps 次执行一次优化步骤
-    #         if (i + 1) % accumulation_steps == 0:
-    #             optimizer.step()
-    #             torch.cuda.empty_cache()
-
-    #     # 如果总batch数不是accumulation_steps的整数倍，处理剩余的梯度
-    #     if input_size % accumulation_steps != 0:
-    #         optimizer.step()
-    #         torch.cuda.empty_cache()
-
-#         for m in self.tasks:
-#             train_loss[m] = round(train_loss[m] / len(data_loader.dataset), 4)
-        total_loss = round(total_loss / input_size, 4)
-#         print('TRAIN'+" >> loss: ",total_loss, "   M_loss: ", train_loss['M'], "  T_loss: ", train_loss['T'], "  A_loss: ", train_loss['A'])
-        
-        return total_loss
 
     def do_test(self, model, data_loader, mode):
         model.eval()
@@ -214,13 +160,12 @@ class ChTrainer():
 
                 # Predictions from 1 batch of data.
                 outputs = model(text_inputs, text_mask,
-                                audio_inputs, audio_mask)
+                                audio_inputs, audio_mask, self.config.batch_size)
 
                 # Compute the training loss.
                 loss = 0.0
                 loss = self.criterion(
                     outputs, targets.long().to(device).view(-1))
-                val_loss += float(loss.item()*text_inputs.size(0))
                 total_loss += float(loss.item()*text_inputs.size(0))
                 input_size += text_inputs.size(0)
 
@@ -228,18 +173,14 @@ class ChTrainer():
                 y_pred.append(outputs.cpu())
                 y_true.append(targets.cpu())
 
-        val_loss = round(val_loss / input_size, 4)
-
         total_loss = round(total_loss / input_size, 4)
-        print(mode+" >> loss: ", total_loss, "   M_loss: ", val_loss['M'])
+        print(mode+" >> loss: ", total_loss)
 
         eval_results = {}
-        pred, true = torch.cat(y_pred[m]), torch.cat(y_true[m])
-        # print(f"y_pred is {pred}, y_true is {true}")
-        # print(f"y_pred shape is {pred.shape}, y_true shape is {true.shape}")
+        pred, true = torch.cat(y_pred), torch.cat(y_true)
         
         results = self.metrics(pred, true)
-        print('%s: >> ' %  + dict_to_str(results))
+        print(dict_to_str(results))
         eval_results['M_result'] = results
         eval_results['Loss'] = total_loss
         
@@ -262,8 +203,7 @@ def ChRun(config):
     train_loader, test_loader, val_loader = data_loader(batch_size=config.batch_size)
     
 
-    if config.model == 'cme':
-        model = rob_hub_cme(config).to(device)
+    model = rob_hub_cme(config).to(device)
     for param in model.hubert_model.feature_extractor.parameters():
         param.requires_grad = False
 
@@ -281,7 +221,7 @@ def ChRun(config):
     for epoch in range(large_epoch):
         print('---------------------EPOCH: ', epoch, '--------------------')
         total_loss_train = trainer.do_train(model, train_loader)
-        writer_train.add_scalar('Loss/TRAIN', total_loss_train, epoch)
+        # writer_train.add_scalar('Loss/TRAIN', total_loss_train, epoch)
         eval_results = trainer.do_test(model, val_loader, "VAL")
         # nni.report_intermediate_result(eval_results['Mult_acc_5'])
         mode = "VAL"
@@ -322,14 +262,12 @@ def ChRun(config):
 
 #     model.eval()
 
-    for i in range(2,6):
-        # model.load_state_dict(torch.load(config.model_save_path+'origin_acc_'+str(i)+'.pth'))
-        model.eval()
-        acc_test_results = trainer.do_test(model, test_loader, "TEST")
-        # nni.report_final_result(test_results_acc['Mult_acc_5'])
-        print('%s: >> ' % (f'TEST (highest val acc_{i}) ') +
-              dict_to_str(acc_test_results))
-        total_acc_test.append(dict_to_str(acc_test_results))
+    model.eval()
+    acc_test_results = trainer.do_test(model, test_loader, "TEST")
+    # nni.report_final_result(test_results_acc['Mult_acc_5'])
+    print('%s: >> ' % (f'TEST (highest val acc_{i}) ') +
+            dict_to_str(acc_test_results))
+    total_acc_test.append(dict_to_str(acc_test_results))
     
     
 

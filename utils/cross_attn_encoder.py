@@ -13,7 +13,8 @@ class BertConfig(object):
                  use_bottleneck=True,
                  n_bottlenecks=3,
                  hidden_size=768,
-                 num_hidden_layers=2,
+                 num_hidden_layers=3,
+                 bottleneck_layers = 2,
                  num_attention_heads=12,
                  intermediate_size=3072,
                  hidden_act="relu",
@@ -43,8 +44,9 @@ class BertConfig(object):
             add_pos_enc: positional encoding
         """
         self.use_bottleneck = use_bottleneck
-        self.n_bottlenecks = n_bottlenecks
+        self.n_bottlenecks = n_bottlenecks 
         self.hidden_size = hidden_size
+        self.bottleneck_layers = bottleneck_layers
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.hidden_act = hidden_act
@@ -54,7 +56,8 @@ class BertConfig(object):
         self.max_position_embeddings = max_position_embeddings
         self.add_abs_pos_emb = add_abs_pos_emb
         self.add_pos_enc = add_pos_enc
-
+        
+    
 
 class GruConfig(object):
     def __init__(self,
@@ -62,7 +65,6 @@ class GruConfig(object):
                  num_layers=2,
                  bidirectional=True,
                  num_heads = 10,
-                 dropout=0.3,
                  hidden_size=128,
                  output_size=300):
         self.input_dim = input_dim
@@ -218,43 +220,42 @@ class BottleneckFusion(nn.Module):
         self.output = BertAttOutput(config)
 
 
-    def forward(self, lang_input ,lang_attention_mask, audio_input, audio_attention_mask, bottleneck):
-        t_mod_lang = lang_input.size(1)
-        t_mod_audio = audio_input.size(1)
+    def forward(self, fusion_input ,fusion_attention_mask, lang_input, lang_attention_mask, bottleneck):
+        t_mod_lang = fusion_input.size(1)
+        t_mod_audio = lang_input.size(1)
         
+        in_mod_fusion = torch.cat([fusion_input, bottleneck], dim=1)
         in_mod_lang = torch.cat([lang_input, bottleneck], dim=1)
-        in_mod_audio = torch.cat([audio_input, bottleneck], dim=1)
     
        
+        if fusion_attention_mask.size(1) < in_mod_fusion.size(1):
+            pad_length = in_mod_fusion.size(1) - fusion_attention_mask.size(1)
+            new_attention_mask_fusion = F.pad(fusion_attention_mask, (0, pad_length), "constant", 0)
+        else:
+            new_attention_mask_fusion = fusion_attention_mask
+        
         if lang_attention_mask.size(1) < in_mod_lang.size(1):
             pad_length = in_mod_lang.size(1) - lang_attention_mask.size(1)
             new_attention_mask_lang = F.pad(lang_attention_mask, (0, pad_length), "constant", 0)
         else:
             new_attention_mask_lang = lang_attention_mask
-        
-        if audio_attention_mask.size(1) < in_mod_audio.size(1):
-            pad_length = in_mod_audio.size(1) - audio_attention_mask.size(1)
-            new_attention_mask_audio = F.pad(audio_attention_mask, (0, pad_length), "constant", 0)
-        else:
-            new_attention_mask_audio = audio_attention_mask
 
 
         
+        out_mod_fusion = self.self_attn(in_mod_fusion, new_attention_mask_fusion)
+        output_fusion = self.output(out_mod_fusion, in_mod_fusion)        
+
         out_mod_lang = self.self_attn(in_mod_lang, new_attention_mask_lang)
-        output_lang = self.output(out_mod_lang, in_mod_lang)        
-
-        out_mod_audio = self.self_attn(in_mod_audio, new_attention_mask_audio)
-        output_audio = self.output(out_mod_audio, in_mod_audio)
+        output_lang = self.output(out_mod_lang, in_mod_lang)
 
 
-        input_out_lang = output_lang[:, :t_mod_lang]
-        input_out_audio = output_audio[:, :t_mod_audio]
-        updated_bottleneck_lang = output_lang[:, t_mod_lang:]        
-        updated_bottleneck_audio = output_audio[:, t_mod_audio:]
-        del in_mod_lang, in_mod_audio, out_mod_lang, out_mod_audio, output_lang, output_audio
+        input_out_fusion = output_fusion[:, :t_mod_lang]
+        updated_bottleneck_fusion = output_fusion[:, t_mod_lang:]        
+        updated_bottleneck_lang = output_lang[:, t_mod_audio:]
+        del in_mod_fusion, in_mod_lang, out_mod_fusion, out_mod_lang, output_lang, output_fusion
         torch.cuda.empty_cache()  
 
-        return input_out_lang, input_out_audio, updated_bottleneck_lang, updated_bottleneck_audio
+        return input_out_fusion, updated_bottleneck_fusion, updated_bottleneck_lang
 
 
 class BertCrossattLayer(nn.Module):
@@ -366,14 +367,44 @@ class GRU_context(nn.Module):
         # fc_output = self.fc2(fc_output_1)
         # print(f"the shape of fc_output is :{fc_output_1.size()}")
         return fc_output_1
+    
+    
+class Bottleneck(nn.Module):
+    def __init__(self, config):
+        super(Bottleneck, self).__init__()
+        self.self_attn = BertSelfattLayer(config)
+        self.bottleneckfusion = BottleneckFusion(config)
+        self.output = BertAttOutput(config)
+        
+        
+    def bottleneck_fusion(self, fusion_input, fusion_attention_mask,lang_feats,lang_attention_mask, bottleneck):
+        lang_output, fusion_bottleneck, lang_bottleneck = self.bottleneckfusion(fusion_input, fusion_attention_mask,lang_feats,lang_attention_mask, bottleneck)
+        return lang_output ,fusion_bottleneck, lang_bottleneck
+    
+    
+    def self_att(self, lang_input, lang_attention_mask):
+        # Self Attention
+        lang_att_output = self.lang_self_att(lang_input, lang_attention_mask)
+        return lang_att_output
+    
+    
+    def forward(self, fusion_input, fusion_attention_mask,
+                lang_feats, lang_attention_mask, bottleneck):
+        fusion_att_output, fusion_bottleneck, lang_bottleneck = self.bottleneck_fusion(fusion_input, 
+        fusion_attention_mask, lang_feats, lang_attention_mask, bottleneck)
+        
+        return fusion_att_output , fusion_bottleneck, lang_bottleneck
+        
+        
+         
+
+    
+    
 
 class CMELayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         
-        # The Bottleneck Fusion Layer
-        self.bottleneckfusion = BottleneckFusion(config)
-
         
         # The cross-attention Layer
         self.audio_attention = BertCrossattLayer(config)
@@ -388,12 +419,9 @@ class CMELayer(nn.Module):
         self.lang_output = BertOutput(config)
         self.audio_inter = BertIntermediate(config)
         self.audio_output = BertOutput(config)
+        
 
         
-        
-    def bottleneck_fusion(self, lang_input, lang_attention_mask,audio_input,audio_attention_mask, bottleneck):
-        lang_output, audio_output, lang_bottleneck, audio_bottleneck = self.bottleneckfusion(lang_input, lang_attention_mask,audio_input,audio_attention_mask, bottleneck)
-        return lang_output, audio_output,lang_bottleneck, audio_bottleneck
     
     def cross_att(self, lang_input, lang_attention_mask, audio_input, audio_attention_mask):
         # Cross Attention
@@ -420,28 +448,23 @@ class CMELayer(nn.Module):
 
 
     def forward(self, lang_feats, lang_attention_mask,
-                audio_feats, audio_attention_mask, bottleneck):
+                audio_feats, audio_attention_mask):
 
         lang_att_output = lang_feats
         audio_att_output = audio_feats
     
+        lang_att_output, audio_att_output = self.cross_att(lang_att_output, lang_attention_mask,
+                                                           audio_att_output, audio_attention_mask)
         
-        lang_att_output, audio_att_output, lang_bottleneck, audio_bottleneck = self.bottleneck_fusion(lang_att_output, lang_attention_mask, audio_att_output, audio_attention_mask, bottleneck)
-
-        # lang_att_output, audio_att_output = self.cross_att(lang_att_output, lang_attention_mask,
-        #                                                    audio_att_output, audio_attention_mask)
         lang_att_output = self.self_att(lang_att_output, lang_attention_mask)
         audio_att_output = self.self_att(audio_att_output, audio_attention_mask)
         
         lang_output = self.output_fc(
             lang_att_output)
         
-        audio_output = self.output_fc(
-            audio_att_output)
-        
         # print(f"the shape of lang_output is :{lang_output.size()}")
 
-        return lang_output, audio_output ,lang_bottleneck, audio_bottleneck
+        return lang_output
 
 
 

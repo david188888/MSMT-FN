@@ -61,7 +61,7 @@ class Dataset_audio_text(torch.utils.data.Dataset):
         # store the audio
         self.audio_file_paths = [f"{audio_directory}/{audio_id}" for audio_id in df['Audio_id']]
         self.feature_extractor = Wav2Vec2FeatureExtractor(
-            feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=True
+            feature_size=1, sampling_rate=8000, padding_value=0.0, do_normalize=True, return_attention_mask=True
         )
         
 
@@ -74,7 +74,7 @@ class Dataset_audio_text(torch.utils.data.Dataset):
         # tokenize text
         tokenized_text = [self.tokenizer(
             str(self.texts[i]),
-            max_length=96,
+            max_length=128,
             padding="max_length",
             truncation=True,
             add_special_tokens=True,
@@ -100,7 +100,7 @@ class Dataset_audio_text(torch.utils.data.Dataset):
 
         # extract audio features
             features = self.feature_extractor(
-                soundData, sampling_rate=16000, max_length=96000,
+                soundData, sampling_rate=8000, max_length=320000,
                 return_attention_mask=True, truncation=True, padding="max_length"
             )
             audio_features.append(torch.tensor(np.array(features['input_values']), dtype=torch.float32).squeeze())
