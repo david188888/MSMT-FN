@@ -122,7 +122,6 @@ class rob_hub_cme(nn.Module):
         for layer_module in self.CME_layers:
             text_outputs = layer_module(text_inputs, text_attn_mask,
                                                 audio_inputs, audio_attn_mask)
-
         expanded_bottleneck = torch.tile(self.bottleneck, (text_inputs.size(0), 1, 1))
         for layer_module in self.Bottelenck_layer:
             bottle = []
@@ -134,13 +133,14 @@ class rob_hub_cme(nn.Module):
             del new_bottleneck
             torch.cuda.empty_cache()
         
-        
+
+        fusion_output = torch.mean(fusion_output.view(batch_size, dialog_len, fusion_output.size(1),fusion_output.size(2)),dim=2)
         # pass through GRU layers
         gru_output = self.GRU_layers(fusion_output)
         # gru_output = gru_output.unsqueeze(1)
         del fusion_output, text_attn_mask, audio_inputs, audio_attn_mask, T_hidden_states, A_hidden_states, audio_out, raw_output
         torch.cuda.empty_cache()
-
+        
         fused_output = self.fused_output_layers(gru_output)
         
         gc.collect()

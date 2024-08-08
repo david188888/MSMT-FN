@@ -1,7 +1,9 @@
 import argparse
-from utils.en_train import EnConfig, EnRun
 from utils.ch_train import ChConfig, ChRun
 import nni
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 
 
 from setuptools import setup
@@ -17,24 +19,18 @@ def strtobool(val):
         raise ValueError(f"Invalid truth value: {val}")
 
 def main(args):
-    ChRun(ChConfig(batch_size=args['batch_size'],learning_rate=args['lr'],seed=args['seed'], model=args['model'], tasks = args['tasks'],
-                                    cme_version=args['cme_version'], num_hidden_layers=args['num_hidden_layers'], scheduler_type=args['scheduler']))
+    ChRun(ChConfig(batch_size=args['batch_size'],learning_rate=args['lr'],seed=args['seed'],
+              num_hidden_layers=args['num_hidden_layers'], scheduler_type=args['scheduler']))
 
 if __name__ == "__main__":
     try:
         tuner_params = nni.get_next_parameter() 
         parser = argparse.ArgumentParser()
         parser.add_argument('--seed', type=int, default=42, help='random seed')
-        parser.add_argument('--batch_size', type=int, default=8, help='batch size')
+        parser.add_argument('--batch_size', type=int, default=1, help='batch size')
         parser.add_argument('--lr', type=float, default=1e-5, help='learning rate, recommended: 5e-6 for mosi, mosei, 1e-5 for sims')
         parser.add_argument('--model', type=str, default='cme', help='concatenate(cc) or cross-modality encoder(cme)')
-        parser.add_argument('--cme_version', type=str, default='v3', help='version')
-        parser.add_argument('--dataset', type=str, default='mosi', help='dataset name: mosi, mosei, sims')
-        parser.add_argument('--num_hidden_layers', type=int, default=5, help='number of hidden layers for cross-modality encoder')
-        parser.add_argument('--tasks', type=str, default='MTA', help='losses to train: M: multi-modal, T: text, A: audio (defalut: MTA))')
-        parser.add_argument('--context', default=True, help='incorporate context or not', dest='context', type=lambda x: bool(strtobool(x)))
-        parser.add_argument('--text_context_len', type=int, default=2)
-        parser.add_argument('--audio_context_len', type=int, default=1)
+        parser.add_argument('--num_hidden_layers', type=int, default=3, help='number of hidden layers for cross-modality encoder')
         parser.add_argument('--scheduler', type=str, default='fixed', help='scheduler: exponentialLR, cosineAnnealingLR, reduceLROnPlateau')
         args = parser.parse_args()
         params = vars(args)
