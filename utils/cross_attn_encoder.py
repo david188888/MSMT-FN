@@ -349,7 +349,6 @@ class GRU_context(nn.Module):
         self.gru = nn.GRU(input_size = self.input_dim, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first = True, bidirectional = self.bidirectional)
         self.fc1 = nn.Linear(self.hidden_size*self.n_directions, 768)
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(self.dropout)
         # self.fc2 = nn.Linear(768, self.output_size)
         
     
@@ -363,7 +362,6 @@ class GRU_context(nn.Module):
         # print(f"the shape of concat_hidden is :{concat_hidden.size()}")
         fc_output_1 = self.fc1(concat_hidden)
         fc_output_1 = self.relu(fc_output_1)
-        fc_output_1 = self.dropout(fc_output_1)
         # fc_output = self.fc2(fc_output_1)
         # print(f"the shape of fc_output is :{fc_output_1.size()}")
         return fc_output_1
