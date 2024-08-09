@@ -44,7 +44,7 @@ class rob_hub_cme(nn.Module):
         self.GRU_layers = GRU_context(GRU_config)
         
         # multi-head attention
-        # self.multi_head_attn = BertSelfattLayer(Bert_config)
+        self.multi_head_attn = nn.MultiheadAttention(embed_dim=768, num_heads=12, dropout=config.dropout)
 
         
         
@@ -140,8 +140,10 @@ class rob_hub_cme(nn.Module):
         # gru_output = gru_output.unsqueeze(1)
         del fusion_output, text_attn_mask, audio_inputs, audio_attn_mask, T_hidden_states, A_hidden_states, audio_out, raw_output
         torch.cuda.empty_cache()
-        
-        fused_output = self.fused_output_layers(gru_output)
+        gru_output = gru_output.unsqueeze(1)
+        output,_ = self.multi_head_attn(gru_output, gru_output, gru_output)
+        output = output.squeeze(1)
+        fused_output = self.fused_output_layers(output)
         
         gc.collect()
             

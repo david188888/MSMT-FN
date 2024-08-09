@@ -64,15 +64,13 @@ class GruConfig(object):
                  input_dim=768,
                  num_layers=2,
                  bidirectional=True,
-                 num_heads = 10,
                  hidden_size=128,
-                 output_size=300):
+                 output_size=768):
         self.input_dim = input_dim
         self.num_layers = num_layers
         self.bidirectional = bidirectional
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.num_heads = num_heads
         self.dropout = 0.3
         
 
@@ -347,8 +345,11 @@ class GRU_context(nn.Module):
         self.n_directions = 2 if self.bidirectional else 1
         
         self.gru = nn.GRU(input_size = self.input_dim, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first = True, bidirectional = self.bidirectional)
-        self.fc1 = nn.Linear(self.hidden_size*self.n_directions, 768)
-        self.relu = nn.ReLU()
+        self.fc = nn.Sequential(
+            nn.Linear(self.hidden_size*self.n_directions, self.output_size),
+            nn.ReLU(),
+            nn.Dropout(self.dropout),
+        )
         # self.fc2 = nn.Linear(768, self.output_size)
         
     
@@ -360,10 +361,7 @@ class GRU_context(nn.Module):
         backward_hidden = hidden[-1, :, :]
         concat_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
         # print(f"the shape of concat_hidden is :{concat_hidden.size()}")
-        fc_output_1 = self.fc1(concat_hidden)
-        fc_output_1 = self.relu(fc_output_1)
-        # fc_output = self.fc2(fc_output_1)
-        # print(f"the shape of fc_output is :{fc_output_1.size()}")
+        fc_output_1 = self.fc(concat_hidden)
         return fc_output_1
     
     
@@ -372,12 +370,20 @@ class Bottleneck(nn.Module):
         super(Bottleneck, self).__init__()
         self.self_attn = BertSelfattLayer(config)
         self.bottleneckfusion = BottleneckFusion(config)
-        self.output = BertAttOutput(config)
+        self.inter = BertIntermediate(config)
+        self.output = BertOutput(config)
         
         
     def bottleneck_fusion(self, fusion_input, fusion_attention_mask,lang_feats,lang_attention_mask, bottleneck):
         lang_output, fusion_bottleneck, lang_bottleneck = self.bottleneckfusion(fusion_input, fusion_attention_mask,lang_feats,lang_attention_mask, bottleneck)
         return lang_output ,fusion_bottleneck, lang_bottleneck
+    
+    def output_fc(self, input):
+        # FC layers
+        fusion_inter_output = self.inter(input)
+        # Layer output
+        fusion_output = self.output(fusion_inter_output, input)
+        return fusion_output
     
     
     def self_att(self, lang_input, lang_attention_mask):
@@ -390,8 +396,9 @@ class Bottleneck(nn.Module):
                 lang_feats, lang_attention_mask, bottleneck):
         fusion_att_output, fusion_bottleneck, lang_bottleneck = self.bottleneck_fusion(fusion_input, 
         fusion_attention_mask, lang_feats, lang_attention_mask, bottleneck)
+        fusion_output = self.output_fc(fusion_att_output)
         
-        return fusion_att_output , fusion_bottleneck, lang_bottleneck
+        return fusion_output , fusion_bottleneck, lang_bottleneck
         
         
          
@@ -437,7 +444,6 @@ class CMELayer(nn.Module):
     def output_fc(self, lang_input):
         # FC layers
         lang_inter_output = self.lang_inter(lang_input)
-
 
         # Layer output
         lang_output = self.lang_output(lang_inter_output, lang_input)
