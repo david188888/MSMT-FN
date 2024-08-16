@@ -47,12 +47,13 @@ class ChConfig(object):
                  early_stop=8,
                  dropout=0.1,
                  seed=42,
-                 batch_size=2,
-                 num_hidden_layers=3,
-                 bottleneck_layers = 2,
+                 batch_size=1,
+                 num_hidden_layers=2,
+                 n_bottlenecks = 2,
+                 bottleneck_layers =2,
                  scheduler_type = 'fixed',
                  num_layers_gru = 2,
-                 hidden_size_gru = 156,
+                 hidden_size_gru = 128,
                  use_regularization = 'L2'
                  ):
 
@@ -64,6 +65,7 @@ class ChConfig(object):
         self.seed = seed
         self.batch_size = batch_size
         self.num_hidden_layers = num_hidden_layers
+        self.n_bottlenecks = n_bottlenecks
         self.bottleneck_layers = bottleneck_layers
         self.scheduler_type = scheduler_type
         self.num_layers_gru = num_layers_gru
@@ -99,6 +101,7 @@ class ChTrainer():
         # scheduler = get_linear_schedule_with_warmup(
         #     optimizer, num_warmup_steps=0.1*total_steps, num_training_steps=total_steps)
         total_loss = 0
+        accumulation_steps = 4
         input_size = 0
         # Loop over all batches.
         for i, batch in enumerate(tqdm(data_loader)):
@@ -108,8 +111,6 @@ class ChTrainer():
             audio_mask = batch["audio_masks"].to(device)
             targets = batch["targets"]
 
-            # To zero out the gradients.
-            optimizer.zero_grad()
             batch_size = self.config.batch_size
             outputs = model(text_inputs, text_mask, audio_inputs, audio_mask, batch_size)
             # Compute the training loss.
@@ -123,7 +124,7 @@ class ChTrainer():
                 l1_regularization = l1_weight * sum(param.abs().sum() for param in model.parameters())
                 loss += l1_regularization
                 
-                
+            # 实现L2正则化
             elif self.config.use_regularization == 'L2':
                 l2_weight = 0.5
                 l2_regularization = l2_weight * sum(param.pow(2).sum() for param in model.parameters())
@@ -131,10 +132,10 @@ class ChTrainer():
                 
             else:
                 pass
-
-            
             loss.backward()
-            optimizer.step()           
+            if (i+1) % accumulation_steps == 0:
+                optimizer.step()
+                optimizer.zero_grad()  
             total_loss += loss.item()*text_inputs.size(0)
             input_size += text_inputs.size(0)
             final_loss = round(total_loss / input_size, 4)
@@ -198,11 +199,8 @@ def ChRun(config):
     torch.backends.cudnn.deterministic = True
     torch.cuda.empty_cache()
 
-    
-
     train_loader, test_loader, val_loader = data_loader(batch_size=config.batch_size)
     
-
     model = rob_hub_cme(config).to(device)
     for param in model.hubert_model.feature_extractor.parameters():
         param.requires_grad = False

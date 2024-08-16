@@ -5,7 +5,7 @@ import sys
 import torch.nn.functional as F
 import gc
 
-class BertConfig(object):
+class AttnConfig(object):
     """Configuration class to store the configuration of a `BertModel`.
     """
 
@@ -13,7 +13,7 @@ class BertConfig(object):
                  use_bottleneck=True,
                  n_bottlenecks=3,
                  hidden_size=768,
-                 num_hidden_layers=3,
+                 num_hidden_layers=2,
                  bottleneck_layers = 2,
                  num_attention_heads=12,
                  intermediate_size=3072,
@@ -23,7 +23,7 @@ class BertConfig(object):
                  max_position_embeddings=512,
                  add_abs_pos_emb=False,
                  add_pos_enc=False):
-        """Constructs BertConfig.
+        """Constructs AttnConfig.
         Args:
             hidden_size: Size of the encoder layers and the pooler layer.
             num_hidden_layers: Number of hidden layers in the Transformer encoder.
@@ -71,7 +71,7 @@ class GruConfig(object):
         self.bidirectional = bidirectional
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.dropout = 0.3
+        # self.dropout = 0.3
         
 
 BertLayerNorm = torch.nn.LayerNorm
@@ -341,14 +341,14 @@ class GRU_context(nn.Module):
         self.num_layers = config.num_layers
         self.output_size = config.output_size
         self.bidirectional = config.bidirectional
-        self.dropout = config.dropout
+        # self.dropout = config.dropout
         self.n_directions = 2 if self.bidirectional else 1
         
         self.gru = nn.GRU(input_size = self.input_dim, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first = True, bidirectional = self.bidirectional)
         self.fc = nn.Sequential(
             nn.Linear(self.hidden_size*self.n_directions, self.output_size),
             nn.ReLU(),
-            nn.Dropout(self.dropout),
+            # nn.Dropout(self.dropout),
         )
         # self.fc2 = nn.Linear(768, self.output_size)
         

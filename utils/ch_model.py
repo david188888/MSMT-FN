@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from transformers import RobertaModel, HubertModel, AutoModel
-from utils.cross_attn_encoder import CMELayer, BertConfig, GRU_context, GruConfig, Bottleneck
+from utils.cross_attn_encoder import CMELayer, AttnConfig, GRU_context, GruConfig, Bottleneck
 # from positional_encodings.torch_encodings import PositionalEncodingPermute1D, Summer
 import torch.nn.functional as F
 import gc
@@ -26,17 +26,17 @@ class rob_hub_cme(nn.Module):
 
 
         # CME layers
-        Bert_config = BertConfig(num_hidden_layers=config.num_hidden_layers)
+        Attn_config = AttnConfig(num_hidden_layers=config.num_hidden_layers,n_bottlenecks=config.n_bottlenecks,bottleneck_layers=config.bottleneck_layers)
         self.CME_layers = nn.ModuleList(
-            [CMELayer(Bert_config) for _ in range(Bert_config.num_hidden_layers)]
+            [CMELayer(Attn_config) for _ in range(Attn_config.num_hidden_layers)]
         )
 
         self.Bottelenck_layer = nn.ModuleList(
-            [Bottleneck(Bert_config) for _ in range(Bert_config.bottleneck_layers)]
+            [Bottleneck(Attn_config) for _ in range(Attn_config.bottleneck_layers)]
         )
-        if Bert_config.use_bottleneck:
+        if Attn_config.use_bottleneck:
             self.bottleneck = nn.Parameter(torch.randn(
-                1, Bert_config.n_bottlenecks, Bert_config.hidden_size) * 0.02)
+                1, Attn_config.n_bottlenecks, Attn_config.hidden_size) * 0.02)
             self.bottleneck = self.bottleneck.to(dtype=torch.float32)
 
         
@@ -71,7 +71,6 @@ class rob_hub_cme(nn.Module):
     
     def forward(self, text_inputs, text_mask, audio_inputs, audio_mask,batch_size):
         dialog_len = text_inputs.size(0)//batch_size
-        bottle = []
         # text feature extraction
         # t_output = torch.zeros(text_inputs.shape[0], text_inputs.shape[1], 768).to(device)
         # t_hidden = torch.zeros(text_inputs.shape[0], text_inputs.shape[1], text_inputs.shape[2], 768).to(device)
@@ -135,15 +134,16 @@ class rob_hub_cme(nn.Module):
         
 
         fusion_output = torch.mean(fusion_output.view(batch_size, dialog_len, fusion_output.size(1),fusion_output.size(2)),dim=2)
+        # fusion_output = torch.mean(text_outputs.view(batch_size, dialog_len, text_outputs.size(1),text_outputs.size(2)),dim=2)
         # pass through GRU layers
         gru_output = self.GRU_layers(fusion_output)
         # gru_output = gru_output.unsqueeze(1)
         del fusion_output, text_attn_mask, audio_inputs, audio_attn_mask, T_hidden_states, A_hidden_states, audio_out, raw_output
         torch.cuda.empty_cache()
-        gru_output = gru_output.unsqueeze(1)
-        output,_ = self.multi_head_attn(gru_output, gru_output, gru_output)
-        output = output.squeeze(1)
-        fused_output = self.fused_output_layers(output)
+        # gru_output = gru_output.unsqueeze(1)
+        # output,_ = self.multi_head_attn(gru_output, gru_output, gru_output)
+        # output = output.squeeze(1)
+        fused_output = self.fused_output_layers(gru_output)
         
         gc.collect()
             

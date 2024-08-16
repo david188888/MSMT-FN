@@ -2,18 +2,15 @@ import torch
 from torch import nn
 import torch.utils
 import torch.utils.data
-import transformers
 import torchaudio
 # import audiomentations
 from audiomentations import *
 from sklearn.preprocessing import LabelEncoder
 from transformers import AutoTokenizer, Wav2Vec2FeatureExtractor
-from torch.utils.data import DataLoader, BatchSampler
-import random
+from pathlib import Path
+from torch.utils.data import DataLoader
 import pandas as pd
 import numpy as np
-import soundfile as sf
-import os
 
 
 
@@ -126,54 +123,6 @@ class QA_Dataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.phone_groups)
     
-    def collate_fn(batch):
-        text_tokens = []
-        text_masks = []
-        audio_inputs = []
-        audio_masks = []
-
-        targets_M = []
-
-        # organize batch
-        for i in range(len(batch)):
-            # text
-            text_tokens.append(batch[i]['text_tokens'])
-            text_masks.append(batch[i]['text_masks'])
-            # audio
-            audio_inputs.append(batch[i]['audio_inputs'])
-            audio_masks.append(batch[i]['audio_masks'])
-
-        # labels
-            targets_M.append(batch[i]['target']['M'])
-            
-        # print(f"size of text_tokens: {len(text_tokens), len(text_tokens[0]), len(text_tokens[0][0])}")
-        # print(f"size of audio_inputs: {len(audio_inputs), len(audio_inputs[0]), len(audio_inputs[0][0])}")
-        # print(f"targets_M: {targets_M}")
-        
-        text_tokens = torch.nn.utils.rnn.pad_sequence([tt.clone().detach().to(dtype=torch.long) for tt in text_tokens], batch_first=True)
-        text_masks = torch.nn.utils.rnn.pad_sequence([tm.clone().detach().to(dtype=torch.long) for tm in text_masks],batch_first=True)
-        audio_inputs = torch.nn.utils.rnn.pad_sequence([ai.clone().detach() for ai in audio_inputs], batch_first=True)
-        audio_masks = torch.nn.utils.rnn.pad_sequence([am.clone().detach() for am in audio_masks],batch_first=True)
-        
-        
-        text_inputs = text_tokens.view(text_tokens.size(0)*text_tokens.size(1), text_tokens.size(2))
-        text_masks = text_masks.view(text_masks.size(0)*text_masks.size(1), text_masks.size(2))
-        audio_inputs = audio_inputs.view(audio_inputs.size(0)*audio_inputs.size(1), audio_inputs.size(2))
-        audio_masks = audio_masks.view(audio_masks.size(0)*audio_masks.size(1), audio_masks.size(2))
-
-        
-
-        return {
-            # text
-            "text_tokens": text_inputs,
-            "text_masks": text_masks,
-            # audio
-            "audio_inputs": audio_inputs,
-            "audio_masks": audio_masks,
-            # labels
-            "targets": 
-                torch.tensor(targets_M, dtype=torch.float32),
-        }
 
 
 class IEMOCAPDataset(torch.utils.data.Dataset):
@@ -205,42 +154,62 @@ class IEMOCAPDataset(torch.utils.data.Dataset):
         return [pad_sequence(dat[i]) if i<4 else pad_sequence(dat[i], True) if i<6 else dat[i].tolist() for i in dat]
 
 
+
+
 class MELDDataset(torch.utils.data.Dataset):
-    def __init__(self, path, train=True):
-        self.videoIDs, self.videoSpeakers, self.videoLabels, self.videoText, \
-        self.roberta2, self.roberta3, self.roberta4, \
-        self.videoAudio, self.videoVisual, self.videoSentence, self.trainVid,\
-        self.testVid, _ = pickle.load(open(path, 'rb'))
-
-        self.keys = [x for x in (self.trainVid if train else self.testVid)]
-
-        self.len = len(self.keys)
-        
+    def __init__(self, csv_file, audio_dir):
+        """
+        csv_file: 包含对话数据的CSV文件路径。
+        audio_dir: 存放音频文件的目录路径。
+        """
+        df = pd.read_csv(csv_file)
+        self.audio_dir = Path(audio_dir)
+        self.audio_id = df['Dialogue_ID']
+        encoder = LabelEncoder()
+        self.target = encoder.fit_transform(list(df['label']))
+        self.text = df['Utterance']
+        self.tokenizer = AutoTokenizer.from_pretrained("roberta-large")
         self.feature_extractor = Wav2Vec2FeatureExtractor(feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=True)
-        self.teokenizer = AutoTokenizer.from_pretrained("roberta-large")
+        self.audio_file_paths = []
+        for i in range(len(df)):
+            self.audio_file_paths.append(self.audio_dir / f"{df['Dialogue_ID'][i]}_{df['Utterance_ID'][i]}.wav")
         
-    def __getitem__(self, index):
-        vid = self.keys[index]
-        return torch.FloatTensor(self.videoText[vid]),\
-               torch.FloatTensor(self.videoVisual[vid]),\
-               torch.FloatTensor(self.videoAudio[vid]),\
-               torch.FloatTensor(self.videoSpeakers[vid]),\
-               torch.FloatTensor([1]*len(self.videoLabels[vid])),\
-               torch.LongTensor(self.videoLabels[vid]),\
-               vid
-
+        
     def __len__(self):
-        return self.len
+        return len(self.df)
 
-    def return_labels(self):
-        return_label = []
-        for key in self.keys:
-            return_label+=self.videoLabels[key]
-        return return_label
+    def __getitem__(self, idx):
+        # 获取数据行
+        text = str(self.text[idx])
 
-    def collate_fn(self, data):
-        dat = pd.DataFrame(data)
-        return [pad_sequence(dat[i]) if i<4 else pad_sequence(dat[i], True) if i<6 else dat[i].tolist() for i in dat]
+        # 处理文本
+        tokenized_text = self.tokenizer(
+                text,            
+                max_length = 96,                                
+                padding = "max_length",     # Pad to the specified max_length. 
+                truncation = True,          # Truncate to the specified max_length. 
+                add_special_tokens = True,  # Whether to insert [CLS], [SEP], <s>, etc.   
+                return_attention_mask = True            
+            )  
+
+
+        # 处理音频
+        sound,_ = torchaudio.load(self.audio_file_paths[idx])
+        soundData = torch.mean(sound, dim=0, keepdim=False)
+        features = self.feature_extractor(soundData, sampling_rate=16000, max_length=96000,return_attention_mask=True,truncation=True, padding="max_length")
+        audio_features = torch.tensor(np.array(features['input_values']), dtype=torch.float32).squeeze()
+        audio_masks = torch.tensor(np.array(features['attention_mask']), dtype=torch.long).squeeze()
+
+        # 处理目标
+        emotions = {'neutral': 0, 'happy': 1, 'sad': 2, 'anger': 3, 'fear': 4, 'disgust': 5, 'surprise': 6}
+
+        return {
+            "text_tokens": torch.tensor(tokenized_text["input_ids"], dtype=torch.long),
+            "text_masks": torch.tensor(tokenized_text["attention_mask"], dtype=torch.long),
+            "audio_inputs": audio_features,
+            "audio_masks": audio_masks,
+            "targets": torch.tensor(self.target[idx], dtype=torch.float)
+        }
 
 class Dataset_sims(torch.utils.data.Dataset):
     # Argument List
@@ -424,6 +393,56 @@ class Dataset_mosi(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.targets_M)
 
+
+
+def collate_fn(batch):
+        text_tokens = []
+        text_masks = []
+        audio_inputs = []
+        audio_masks = []
+
+        targets_M = []
+
+        # organize batch
+        for i in range(len(batch)):
+            # text
+            text_tokens.append(batch[i]['text_tokens'])
+            text_masks.append(batch[i]['text_masks'])
+            # audio
+            audio_inputs.append(batch[i]['audio_inputs'])
+            audio_masks.append(batch[i]['audio_masks'])
+
+        # labels
+            targets_M.append(batch[i]['target']['M'])
+            
+        # print(f"size of text_tokens: {len(text_tokens), len(text_tokens[0]), len(text_tokens[0][0])}")
+        # print(f"size of audio_inputs: {len(audio_inputs), len(audio_inputs[0]), len(audio_inputs[0][0])}")
+        # print(f"targets_M: {targets_M}")
+        
+        text_tokens = torch.nn.utils.rnn.pad_sequence([tt.clone().detach().to(dtype=torch.long) for tt in text_tokens], batch_first=True)
+        text_masks = torch.nn.utils.rnn.pad_sequence([tm.clone().detach().to(dtype=torch.long) for tm in text_masks],batch_first=True)
+        audio_inputs = torch.nn.utils.rnn.pad_sequence([ai.clone().detach() for ai in audio_inputs], batch_first=True)
+        audio_masks = torch.nn.utils.rnn.pad_sequence([am.clone().detach() for am in audio_masks],batch_first=True)
+        
+        
+        text_inputs = text_tokens.view(text_tokens.size(0)*text_tokens.size(1), text_tokens.size(2))
+        text_masks = text_masks.view(text_masks.size(0)*text_masks.size(1), text_masks.size(2))
+        audio_inputs = audio_inputs.view(audio_inputs.size(0)*audio_inputs.size(1), audio_inputs.size(2))
+        audio_masks = audio_masks.view(audio_masks.size(0)*audio_masks.size(1), audio_masks.size(2))
+
+        
+
+        return {
+            # text
+            "text_tokens": text_inputs,
+            "text_masks": text_masks,
+            # audio
+            "audio_inputs": audio_inputs,
+            "audio_masks": audio_masks,
+            # labels
+            "targets": 
+                torch.tensor(targets_M, dtype=torch.float32),
+        }
 
 def data_loader(batch_size):
     # csv_path = 'data/labell.csv'
