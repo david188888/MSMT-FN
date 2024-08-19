@@ -331,7 +331,20 @@ class BertLayer(nn.Module):
       Above modules are copied from BERT (pytorch-transformer) with modifications.
 ---------------------------------------------------------------------------------------
 """
-
+class FCLayer(nn.Module):
+    def __init__(self, config):
+        super(FCLayer, self).__init__()
+        self.fc = nn.Linear(config.input_dim, config.output_dim)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(config.dropout)
+    
+    def forward(self, x):
+        # 先对输入的张量进行形状变换，合并 100 这个维度
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        return x
     
 class GRU_context(nn.Module):
     def __init__(self, config):
@@ -355,7 +368,7 @@ class GRU_context(nn.Module):
     
     def forward(self, inputs):
         # print(self.input_dim)
-        output, hidden = self.gru(inputs)
+        _, hidden = self.gru(inputs)
         # print(f"the shape of hidden is :{hidden.size()}")
         forward_hidden = hidden[-2, :, :]
         backward_hidden = hidden[-1, :, :]

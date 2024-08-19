@@ -53,8 +53,11 @@ class ChConfig(object):
                  bottleneck_layers =2,
                  scheduler_type = 'fixed',
                  num_layers_gru = 2,
+                 accumulation_steps = 4,
                  hidden_size_gru = 128,
-                 use_regularization = 'L2'
+                 use_regularization = 'L2',
+                 input_dim=99072,
+                 output_dim=768,
                  ):
 
         self.learning_rate = learning_rate
@@ -63,6 +66,7 @@ class ChConfig(object):
         self.model_save_path = model_save_path
         self.early_stop = early_stop
         self.seed = seed
+        self.accumulation_steps = accumulation_steps
         self.batch_size = batch_size
         self.num_hidden_layers = num_hidden_layers
         self.n_bottlenecks = n_bottlenecks
@@ -71,6 +75,8 @@ class ChConfig(object):
         self.num_layers_gru = num_layers_gru
         self.hidden_size_gru = hidden_size_gru
         self.use_regularization = use_regularization
+        self.input_dim = input_dim
+        self.output_dim = output_dim
 
 
 class ChTrainer():
@@ -101,17 +107,19 @@ class ChTrainer():
         # scheduler = get_linear_schedule_with_warmup(
         #     optimizer, num_warmup_steps=0.1*total_steps, num_training_steps=total_steps)
         total_loss = 0
-        accumulation_steps = 4
+        accumulation_steps = self.config.accumulation_steps
         input_size = 0
         # Loop over all batches.
         for i, batch in enumerate(tqdm(data_loader)):
-            text_inputs = batch["text_tokens"].to(device)
-            audio_inputs = batch["audio_inputs"].to(device)
-            text_mask = batch["text_masks"].to(device)
-            audio_mask = batch["audio_masks"].to(device)
+            text_inputs = batch["text_tokens"].squeeze(0).to(device)
+            audio_inputs = batch["audio_inputs"].squeeze(0).to(device)
+            text_mask = batch["text_masks"].squeeze(0).to(device)
+            audio_mask = batch["audio_masks"].squeeze(0).to(device)
             targets = batch["targets"]
 
+
             batch_size = self.config.batch_size
+
             outputs = model(text_inputs, text_mask, audio_inputs, audio_mask, batch_size)
             # Compute the training loss.
             loss = 0.0

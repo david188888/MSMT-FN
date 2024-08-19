@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from transformers import RobertaModel, HubertModel, AutoModel
-from utils.cross_attn_encoder import CMELayer, AttnConfig, GRU_context, GruConfig, Bottleneck
+from utils.cross_attn_encoder import CMELayer, AttnConfig, GRU_context, GruConfig, Bottleneck, FCLayer
 # from positional_encodings.torch_encodings import PositionalEncodingPermute1D, Summer
 import torch.nn.functional as F
 import gc
@@ -43,6 +43,7 @@ class rob_hub_cme(nn.Module):
         GRU_config = GruConfig(hidden_size=config.hidden_size_gru, num_layers=config.num_layers_gru)
         self.GRU_layers = GRU_context(GRU_config)
         
+        self.fc_layer = FCLayer(config)
         # multi-head attention
         self.multi_head_attn = nn.MultiheadAttention(embed_dim=768, num_heads=12, dropout=config.dropout)
 
@@ -133,8 +134,9 @@ class rob_hub_cme(nn.Module):
             torch.cuda.empty_cache()
         
 
-        fusion_output = torch.mean(fusion_output.view(batch_size, dialog_len, fusion_output.size(1),fusion_output.size(2)),dim=2)
-        # fusion_output = torch.mean(text_outputs.view(batch_size, dialog_len, text_outputs.size(1),text_outputs.size(2)),dim=2)
+        fusion_output = self.fc_layer(fusion_output)
+        fusion_output = fusion_output.view(batch_size, dialog_len, -1)
+
         # pass through GRU layers
         gru_output = self.GRU_layers(fusion_output)
         # gru_output = gru_output.unsqueeze(1)
@@ -147,7 +149,6 @@ class rob_hub_cme(nn.Module):
         
         gc.collect()
             
-        
         return fused_output
         
 
