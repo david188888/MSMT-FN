@@ -11,6 +11,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 import pandas as pd
 import numpy as np
+import os
 
 
 
@@ -68,6 +69,8 @@ class QA_Dataset(torch.utils.data.Dataset):
         phone = self.unique_phones[index]
         # print(f"the phone is {phone}")
         indeces = self.phone_groups.indices[phone]
+        threshold = 10
+        batches = []
         # print(f"the indeces is {indeces}")
         # extract text feature
         # tokenize text
@@ -79,9 +82,9 @@ class QA_Dataset(torch.utils.data.Dataset):
             add_special_tokens=True,
             return_attention_mask=True
         ) for i in indeces]
-        text_tokens = torch.stack([torch.Tensor(tt["input_ids"]) for tt in tokenized_text]).to(dtype=torch.long)
+        text_tokens = torch.stack([torch.tensor(tt["input_ids"]) for tt in tokenized_text]).to(dtype=torch.long)
         # print(f"the torch shape of text_tokens is {text_tokens.shape}")
-        text_masks = torch.stack([torch.Tensor(tt["attention_mask"]) for tt in tokenized_text]).to(dtype=torch.long)
+        text_masks = torch.stack([torch.tensor(tt["attention_mask"]) for tt in tokenized_text]).to(dtype=torch.long)
         
         audio_features = []
         audio_masks = []
@@ -103,15 +106,35 @@ class QA_Dataset(torch.utils.data.Dataset):
             audio_masks.append(torch.tensor(np.array(features['attention_mask']), dtype=torch.long).squeeze())
         audio_features = torch.stack(audio_features)
         audio_masks = torch.stack(audio_masks)
-        target = self.targets[indeces[0]]
+        target = torch.tensor(self.targets[indeces[0]],dtype=torch.float32)
         
-        return {
-            "text_tokens": text_tokens,
-            "text_masks": text_masks,
-            "audio_inputs": audio_features,
-            "audio_masks": audio_masks,
-            "targets": target
-        }
+        if len(indeces) <= threshold:
+            batch = {
+                "text_tokens": text_tokens,
+                "text_masks": text_masks,
+                "audio_inputs": audio_features,
+                "audio_masks": audio_masks,
+                "targets": target
+            }
+            batches.append(batch)
+        else:
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            
+            second_batch = {
+                "text_tokens": text_tokens[threshold:,:],
+                "text_masks": text_masks[threshold:,:],
+                "audio_inputs": audio_features[threshold:,:],
+                "audio_masks": audio_masks[threshold:,:],
+                "targets": target[threshold:]
+            }
+            batches.extend([first_batch, second_batch])
+        return batches
 
     def __len__(self):
         return len(self.unique_phones)
@@ -173,40 +196,46 @@ class MELDDataset(torch.utils.data.Dataset):
         """
         df = pd.read_csv(csv_file)
         self.audio_dir = Path(audio_dir)
-        self.audio_id = df['Dialogue_ID']
         encoder = LabelEncoder()
-        self.target = encoder.fit_transform(list(df['label']))
+        self.target = encoder.fit_transform(list(df['Emotion']))
         self.text = df['Utterance']
         self.tokenizer = AutoTokenizer.from_pretrained("roberta-large")
         self.dialog_group = df.groupby('Dialogue_ID')
         self.feature_extractor = Wav2Vec2FeatureExtractor(feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=True)
         self.audio_file_paths = []
-        for i in range(len(df)):
-            self.audio_file_paths.append(self.audio_dir / f"{df['Dialogue_ID'][i]}_{df['Utterance_ID'][i]}.wav")
+        for index, row in df.iterrows():
+            dialog_id = row['Dialogue_ID']
+            utterance_id = row['Utterance_ID']
+            
+            file_name = f"dia{dialog_id}_utt{utterance_id}.wav"
+            file_path = os.path.join(self.audio_dir, file_name)
+            self.audio_file_paths.append(file_path)
         self.unqiue_dialog_ids = list(self.dialog_group.indices.keys())
         
     def __len__(self):
         return len(self.unqiue_dialog_ids)
 
     def __getitem__(self, idx):
+        threshold = 20  # 定义阈值
+        batches = []
         # 获取数据行
         dialog_id = self.unqiue_dialog_ids[idx]
         indeces = self.dialog_group.indices[dialog_id]
 
-        target = [self.target[i] for i in indeces]
+        target = torch.tensor([self.target[i] for i in indeces],dtype=torch.float)
 
         # 处理文本
         tokenized_text = [self.tokenizer(
                 str(self.text[i]),            
-                max_length = 96,                                
+                max_length = 60,                                
                 padding = "max_length",     # Pad to the specified max_length. 
                 truncation = True,          # Truncate to the specified max_length. 
                 add_special_tokens = True,  # Whether to insert [CLS], [SEP], <s>, etc.   
                 return_attention_mask = True            
             ) for i in indeces]  
         
-        text_tokens = torch.stack([torch.Tensor(tt['input_ids']) for tt in tokenized_text])
-        text_masks = torch.stack([torch.Tensor(tt['attention_mask']) for tt in tokenized_text])
+        text_tokens = torch.stack([torch.tensor(tt['input_ids']) for tt in tokenized_text]).to(dtype=torch.long)
+        text_masks = torch.stack([torch.tensor(tt['attention_mask']) for tt in tokenized_text]).to(dtype=torch.long)
 
         
         audio_features = []
@@ -222,28 +251,61 @@ class MELDDataset(torch.utils.data.Dataset):
         audio_features = torch.stack(audio_features)
         audio_masks = torch.stack(audio_masks)
         
-        return {
-            "text_tokens": text_tokens,
-            "text_masks": text_masks,
-            "audio_inputs": audio_features,
-            "audio_masks": audio_masks,
-            "targets": target
-        }
+        # print(f"audio_features shape: {audio_features.shape}")
+        # print(f"audio_masks shape: {audio_masks.shape}")
+        # print(f"text_tokens shape: {text_tokens.shape}")
+        # print(f"text_masks shape: {text_masks.shape}")
+        # print(f"Max value in text_inputs: {text_tokens.max()}")
+        # print(f"Min value in text_inputs: {text_tokens.min()}")
         
-    def collate_fn(batch):
-        sample = batch[0]
-        text_tokens = sample['text_tokens'].clone().detach().to(dtype=torch.long).squeeze()
-        text_masks = sample['text_masks'].clone().detach().to(dtype=torch.long).squeeze()
-        audio_inputs = sample['audio_inputs'].clone().detach().squeeze()
-        audio_masks = sample['audio_masks'].clone().detach().squeeze()
         
-        return {
-            "text_tokens": text_tokens,
-            "text_masks": text_masks,
-            "audio_inputs": audio_inputs,
-            "audio_masks": audio_masks,
-            "targets": torch.tensor(sample['targets'], dtype=torch.float32)
-        }
+        if len(indeces) <= threshold:
+            batch = {
+                "text_tokens": text_tokens,
+                "text_masks": text_masks,
+                "audio_inputs": audio_features,
+                "audio_masks": audio_masks,
+                "targets": target
+            }
+            batches.append(batch)
+        else:
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            
+            second_batch = {
+                "text_tokens": text_tokens[threshold:,:],
+                "text_masks": text_masks[threshold:,:],
+                "audio_inputs": audio_features[threshold:,:],
+                "audio_masks": audio_masks[threshold:,:],
+                "targets": target[threshold:]
+            }
+            batches.extend([first_batch, second_batch])
+            
+        return batches
+            
+            
+            
+
+        
+    # def collate_fn(batch):
+    #     sample = batch[0]
+    #     text_tokens = sample['text_tokens'].clone().detach().to(dtype=torch.long).squeeze()
+    #     text_masks = sample['text_masks'].clone().detach().to(dtype=torch.long).squeeze()
+    #     audio_inputs = sample['audio_inputs'].clone().detach().squeeze()
+    #     audio_masks = sample['audio_masks'].clone().detach().squeeze()
+        
+    #     return {
+    #         "text_tokens": text_tokens,
+    #         "text_masks": text_masks,
+    #         "audio_inputs": audio_inputs,
+    #         "audio_masks": audio_masks,
+    #         "targets": torch.tensor(sample['targets'], dtype=torch.float32)
+    #     }
 
 class Dataset_sims(torch.utils.data.Dataset):
     # Argument List
@@ -256,7 +318,8 @@ class Dataset_sims(torch.utils.data.Dataset):
         df = df[df['mode']==mode].reset_index()
         
         # store labels
-        self.targets = df['annotation']
+        encoder = LabelEncoder()
+        self.targets = encoder.fit_transform(list(df['annotation']))
         
         # store texts
         self.texts = df['text']
@@ -281,19 +344,21 @@ class Dataset_sims(torch.utils.data.Dataset):
     def __getitem__(self, index):
         video_id = self.unique_video_ids[index]
         indeces = self.video_id.indices[video_id]
-        target = [self.targets[i] for i in indeces]
+        threshold = 32
+        batches = []
+        target = torch.tensor([self.targets[i] for i in indeces],dtype=torch.float)
        # extract text features        
         tokenized_text = [self.tokenizer(
             str(self.texts[i]),            
-            max_length = 64,                                
+            max_length = 48,                                
             padding = "max_length",     # Pad to the specified max_length. 
             truncation = True,          # Truncate to the specified max_length. 
             add_special_tokens = True,  # Whether to insert [CLS], [SEP], <s>, etc.   
             return_attention_mask = True            
         ) for i in indeces]               
         
-        text_tokens = torch.stack([torch.Tensor(tt['input_ids']) for tt in tokenized_text])
-        text_masks = torch.stack([torch.Tensor(tt['attention_mask']) for tt in tokenized_text])
+        text_tokens = torch.stack([torch.tensor(tt['input_ids']) for tt in tokenized_text]).to(dtype=torch.long)
+        text_masks = torch.stack([torch.tensor(tt['attention_mask']) for tt in tokenized_text]).to(dtype=torch.long)
                 
                 
         audio_features = []
@@ -310,55 +375,228 @@ class Dataset_sims(torch.utils.data.Dataset):
         audio_masks = torch.stack(audio_masks)
 
         
-        return { # text
+        if len(indeces) <= threshold:
+            batch = {
                 "text_tokens": text_tokens,
                 "text_masks": text_masks,
-                 # audio
                 "audio_inputs": audio_features,
                 "audio_masks": audio_masks,
-                 # labels
                 "targets": target
-                }
+            }
+            batches.append(batch)
+        elif (len(indeces)>threshold and len(indeces)<=2*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            
+            second_batch = {
+                "text_tokens": text_tokens[threshold:,:],
+                "text_masks": text_masks[threshold:,:],
+                "audio_inputs": audio_features[threshold:,:],
+                "audio_masks": audio_masks[threshold:,:],
+                "targets": target[threshold:]
+            }
+            batches.extend([first_batch, second_batch])
+            
+        elif (len(indeces)>2*threshold and len(indeces)<=3*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target[threshold:2*threshold]
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:,:],
+                "text_masks": text_masks[2*threshold:,:],
+                "audio_inputs": audio_features[2*threshold:,:],
+                "audio_masks": audio_masks[2*threshold:,:],
+                "targets": target[2*threshold:]
+            }
+            batches.extend([first_batch, second_batch, third_batch])
+            
+        elif (len(indeces)>3*threshold and len(indeces)<=4*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target[threshold:2*threshold]
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target[2*threshold:3*threshold]
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:,:],
+                "text_masks": text_masks[3*threshold:,:],
+                "audio_inputs": audio_features[3*threshold:,:],
+                "audio_masks": audio_masks[3*threshold:,:],
+                "targets": target[3*threshold:]
+            }
+            batches.extend([first_batch, second_batch, third_batch, forth_batch])
+            
+        elif (len(indeces)>4*threshold and len(indeces)<=5*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target[threshold:2*threshold]
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target[2*threshold:3*threshold]
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                "text_masks": text_masks[3*threshold:4*threshold,:],
+                "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                "targets": target[3*threshold:4*threshold]
+            }
+            fivth_batch = {
+                "text_tokens": text_tokens[4*threshold:,:],
+                "text_masks": text_masks[4*threshold:,:],
+                "audio_inputs": audio_features[4*threshold:,:],
+                "audio_masks": audio_masks[4*threshold:,:],
+                "targets": target[4*threshold:]
+            }
+            batches.extend([first_batch, second_batch, third_batch, forth_batch, fivth_batch])
+            
+        elif (len(indeces)>5*threshold and len(indeces)<=6*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target[threshold:2*threshold]
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target[2*threshold:3*threshold]
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                "text_masks": text_masks[3*threshold:4*threshold,:],
+                "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                "targets": target[3*threshold:4*threshold]
+            }
+            fivth_batch = {
+                "text_tokens": text_tokens[4*threshold:5*threshold,:],
+                "text_masks": text_masks[4*threshold:5*threshold,:],
+                "audio_inputs": audio_features[4*threshold:5*threshold,:],
+                "audio_masks": audio_masks[4*threshold:5*threshold,:],
+                "targets": target[4*threshold:5*threshold]
+            }
+            sixth_batch = {
+                "text_tokens": text_tokens[5*threshold:,:],
+                "text_masks": text_masks[5*threshold:,:],
+                "audio_inputs": audio_features[5*threshold:,:],
+                "audio_masks": audio_masks[5*threshold:,:],
+                "targets": target[5*threshold:]
+            }
+            batches.extend([first_batch, second_batch, third_batch, forth_batch, fivth_batch, sixth_batch])
+            
+        else:
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target[threshold:2*threshold]
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target[2*threshold:3*threshold]
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                "text_masks": text_masks[3*threshold:4*threshold,:],
+                "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                "targets": target[3*threshold:4*threshold]
+            }
+            
+            fivth_batch = {
+                "text_tokens": text_tokens[4*threshold:5*threshold,:],
+                "text_masks": text_masks[4*threshold:5*threshold,:],
+                "audio_inputs": audio_features[4*threshold:5*threshold,:],
+                "audio_masks": audio_masks[4*threshold:5*threshold,:],
+                "targets": target[4*threshold:5*threshold]
+            }
+            sixth_batch = {
+                "text_tokens": text_tokens[5*threshold:6*threshold,:],
+                "text_masks": text_masks[5*threshold:6*threshold,:],
+                "audio_inputs": audio_features[5*threshold:6*threshold,:],
+                "audio_masks": audio_masks[5*threshold:6*threshold,:],
+                "targets": target[5*threshold:6*threshold]
+            }
+            
+            seventh_batch = {
+                "text_tokens": text_tokens[5*threshold:,:],
+                "text_masks": text_masks[5*threshold:,:],
+                "audio_inputs": audio_features[5*threshold:,:],
+                "audio_masks": audio_masks[5*threshold:,:],
+                "targets": target[5*threshold:]
+            }
+            batches.extend([first_batch, second_batch,third_batch,forth_batch,fivth_batch,sixth_batch,seventh_batch])
+        return batches
     
     def __len__(self):
         return len(self.unique_video_ids)
-    
-    # def collate_fn_sims(self, batch):   
-        
-    #     sample = batch[0]
-    #     text_tokens = sample['text_tokens'].clone().detach().to(dtype=torch.long).squeeze()
-    #     text_masks = sample['text_masks'].clone().detach().to(dtype=torch.long).squeeze()
-    #     audio_inputs = sample['audio_inputs'].clone().detach().squeeze()
-    #     audio_masks = sample['audio_masks'].clone().detach().squeeze()
-    #     # organize batch
-    #     # for i in range(len(batch)):
-    #     #     # text
-    #     #     text_tokens.append(batch[i]['text_tokens'])
-    #     #     text_masks.append(batch[i]['text_masks'])
-    #     #     #audio
-    #     #     audio_inputs.append(batch[i]['audio_inputs'])
-    #     #     audio_masks.append(batch[i]['audio_masks'])
-
-    #     # # labels
-    #     #     targets_M.append(batch[i]['target'])
-            
-    #     # text_tokens = torch.nn.utils.rnn.pad_sequence([tt.clone().detach().to(dtype=torch.long) for tt in text_tokens], batch_first=True)
-    #     # text_masks = torch.nn.utils.rnn.pad_sequence([tm.clone().detach().to(dtype=torch.long) for tm in text_masks],batch_first=True)
-    #     # audio_inputs = torch.nn.utils.rnn.pad_sequence([ai.clone().detach() for ai in audio_inputs], batch_first=True)
-    #     # audio_masks = torch.nn.utils.rnn.pad_sequence([am.clone().detach() for am in audio_masks],batch_first=True)
-
-    #     return {
-    #             # text
-    #             "text_tokens": text_tokens,
-    #             "text_masks": text_masks,           
-    #             # audio
-    #             "audio_inputs": audio_inputs,
-    #             "audio_masks": audio_masks,
-    #             # labels
-    #             "targets": {
-    #                     torch.tensor(sample['target'], dtype=torch.float32),
-    #                 }
-    #             }   
 
 
 
@@ -370,7 +608,7 @@ class Dataset_mosi(torch.utils.data.Dataset):
     #  text_context_length
     #  audio_context_length
     
-    def __init__(self, csv_path, audio_directory, mode, text_context_length=2, audio_context_length=1):
+    def __init__(self, csv_path, audio_directory, mode):
         df = pd.read_csv(csv_path)
         invalid_files = ['3aIQUQgawaI/12.wav', '94ULum9MYX0/2.wav', 'mRnEJOLkhp8/24.wav', 'aE-X_QdDaqQ/3.wav', '94ULum9MYX0/11.wav', 'mRnEJOLkhp8/26.wav']
         for f in invalid_files:
@@ -381,7 +619,13 @@ class Dataset_mosi(torch.utils.data.Dataset):
         df = df[df['mode']==mode].sort_values(by=['video_id','clip_id']).reset_index()
         
         # store labels
-        self.targets = df['annotation']
+        encoder = LabelEncoder()
+        # df['annotation'] = df['annotation'].apply(lambda x: 'Negative' if x in ['Negative', 'Neutral'] else 'positive')
+        # df = df[df['annotation'] != 'Neutral']
+        # df = df.reset_index(drop=True)
+        # self.targets = encoder.fit_transform(list(df['annotation']))
+        # print("encoder classes: ", encoder.classes_)
+        self.targets = df['label']
         
         # store texts
         df['text'] = df['text'].str[0]+df['text'].str[1::].apply(lambda x: x.lower())
@@ -403,7 +647,8 @@ class Dataset_mosi(torch.utils.data.Dataset):
     def __getitem__(self, index):
         video_id = self.unique_video_ids[index]
         indeces = self.video_id.indices[video_id]       
-
+        threshold = 20
+        batches = []
         # tokenize text
         tokenized_text = [self.tokenizer(
                 str(self.texts[i]),            
@@ -413,8 +658,8 @@ class Dataset_mosi(torch.utils.data.Dataset):
                 add_special_tokens = True,  # Whether to insert [CLS], [SEP], <s>, etc.   
                 return_attention_mask = True            
             ) for i in indeces]
-        text_tokens = torch.stack([torch.Tensor(tt['input_ids']) for tt in tokenized_text])
-        text_masks = torch.stack([torch.Tensor(tt['attention_mask']) for tt in tokenized_text])
+        text_tokens = torch.stack([torch.tensor(tt['input_ids']) for tt in tokenized_text])
+        text_masks = torch.stack([torch.tensor(tt['attention_mask']) for tt in tokenized_text])
         
         audio_features = []
         audio_masks = []
@@ -428,62 +673,171 @@ class Dataset_mosi(torch.utils.data.Dataset):
             audio_masks.append(torch.tensor(np.array(features['attention_mask']), dtype=torch.long).squeeze())
         audio_features = torch.stack(audio_features)
         audio_masks = torch.stack(audio_masks)
-        target = [self.target[i] for i in indeces]
+        target = torch.tensor([self.targets[i] for i in indeces],dtype=torch.float)
 
 
-        return { # text
+        if len(indeces) <= threshold:
+            batch = {
                 "text_tokens": text_tokens,
                 "text_masks": text_masks,
-                # audio
                 "audio_inputs": audio_features,
                 "audio_masks": audio_masks,
-                 # labels
-                "targets": target,
+                "targets": target
+            }
+            batches.append(batch)
+        else:
+            if (len(indeces)>2*threshold and len(indeces)<=3*threshold):
+                first_batch = {
+                    "text_tokens": text_tokens[:threshold,:],
+                    "text_masks": text_masks[:threshold,:],
+                    "audio_inputs": audio_features[:threshold,:],
+                    "audio_masks": audio_masks[:threshold,:],
+                    "targets": target[:threshold]
                 }
+                second_batch = {
+                    "text_tokens": text_tokens[threshold:2*threshold,:],
+                    "text_masks": text_masks[threshold:2*threshold,:],
+                    "audio_inputs": audio_features[threshold:2*threshold,:],
+                    "audio_masks": audio_masks[threshold:2*threshold,:],
+                    "targets": target[threshold:2*threshold]
+                }
+                third_batch = {
+                    "text_tokens": text_tokens[2*threshold:,:],
+                    "text_masks": text_masks[2*threshold:,:],
+                    "audio_inputs": audio_features[2*threshold:,:],
+                    "audio_masks": audio_masks[2*threshold:,:],
+                    "targets": target[2*threshold:]
+                }
+                batches.extend([first_batch, second_batch, third_batch])
+                
+                
+            elif (len(indeces)>3*threshold and len(indeces)<=4*threshold):
+                first_batch = {
+                    "text_tokens": text_tokens[:threshold,:],
+                    "text_masks": text_masks[:threshold,:],
+                    "audio_inputs": audio_features[:threshold,:],
+                    "audio_masks": audio_masks[:threshold,:],
+                    "targets": target[:threshold]
+                } 
+                
+                second_batch = {
+                    "text_tokens": text_tokens[threshold:2*threshold,:],
+                    "text_masks": text_masks[threshold:2*threshold,:],
+                    "audio_inputs": audio_features[threshold:2*threshold,:],
+                    "audio_masks": audio_masks[threshold:2*threshold,:],
+                    "targets": target[threshold:2*threshold]
+                }
+                
+                third_batch = {
+                    "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                    "text_masks": text_masks[2*threshold:3*threshold,:],
+                    "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                    "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                    "targets": target[2*threshold:3*threshold]
+                }
+                
+                forth_batch = {
+                    "text_tokens": text_tokens[3*threshold:,:],
+                    "text_masks": text_masks[3*threshold:,:],
+                    "audio_inputs": audio_features[3*threshold:,:],
+                    "audio_masks": audio_masks[3*threshold:,:],
+                    "targets": target[3*threshold:]
+                }
+                
+                batches.extend([first_batch, second_batch, third_batch, forth_batch])
+            
+            elif (len(indeces)>4*threshold):
+                first_batch = {
+                    "text_tokens": text_tokens[:threshold,:],
+                    "text_masks": text_masks[:threshold,:],
+                    "audio_inputs": audio_features[:threshold,:],
+                    "audio_masks": audio_masks[:threshold,:],
+                    "targets": target[:threshold]
+                }
+                second_batch = {
+                    "text_tokens": text_tokens[threshold:2*threshold,:],
+                    "text_masks": text_masks[threshold:2*threshold,:],
+                    "audio_inputs": audio_features[threshold:2*threshold,:],
+                    "audio_masks": audio_masks[threshold:2*threshold,:],
+                    "targets": target[threshold:2*threshold]
+                }
+                third_batch = {
+                    "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                    "text_masks": text_masks[2*threshold:3*threshold,:],
+                    "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                    "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                    "targets": target[2*threshold:3*threshold]
+                }
+                forth_batch = {
+                    "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                    "text_masks": text_masks[3*threshold:4*threshold,:],
+                    "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                    "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                    "targets": target[3*threshold:4*threshold]
+                }
+                five_batch = {
+                    "text_tokens": text_tokens[4*threshold:,:],
+                    "text_masks": text_masks[4*threshold:,:],
+                    "audio_inputs": audio_features[4*threshold:,:],
+                    "audio_masks": audio_masks[4*threshold:,:],
+                    "targets": target[4*threshold:]
+                }
+                batches.extend([first_batch, second_batch, third_batch, forth_batch,five_batch])
+                
+            else:
+                first_batch = {
+                    "text_tokens": text_tokens[:threshold,:],
+                    "text_masks": text_masks[:threshold,:],
+                    "audio_inputs": audio_features[:threshold,:],
+                    "audio_masks": audio_masks[:threshold,:],
+                    "targets": target[:threshold]
+                }
+                
+                second_batch = {
+                    "text_tokens": text_tokens[threshold:,:],
+                    "text_masks": text_masks[threshold:,:],
+                    "audio_inputs": audio_features[threshold:,:],
+                    "audio_masks": audio_masks[threshold:,:],
+                    "targets": target[threshold:]
+                }
+                batches.extend([first_batch, second_batch])
+        return batches
     
     def __len__(self):
         return len(self.unique_video_ids)
 
 
-    def collate_fn(self,batch):
-        sample = batch[0]
-        text_tokens = sample['text_tokens'].clone().detach().to(dtype=torch.long).squeeze()
-        text_masks = sample['text_masks'].clone().detach().to(dtype=torch.long).squeeze()
-        audio_inputs = sample['audio_inputs'].clone().detach().squeeze()
-        audio_masks = sample['audio_masks'].clone().detach().squeeze()
-        
-        return {
-            "text_tokens": text_tokens,
-            "text_masks": text_masks,
-            "audio_inputs": audio_inputs,
-            "audio_masks": audio_masks,
-            "targets": torch.tensor(sample['targets'], dtype=torch.float32)
-        }
-
-
 
 def data_loader(batch_size):
-    # csv_path = 'data/labell.csv'
-    # audio_file_path = "data/OnlyCustomer"
-    # data = QA_Dataset(csv_path, audio_file_path)
-    # train_data, test_data, val_data = torch.utils.data.random_split(
-    #     data, [int(0.8*len(data)), int(0.1*len(data)), len(data)-int(0.8*len(data))-int(0.1*len(data))])
-    train_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_data/train/dialog_test_11.csv'
-    test_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_data/test/dialog_test_11.csv'
-    verify_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_data/verify/dialog_test_11.csv'
     
-    train_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_data/train/dialog'
-    test_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_data/test/dialog'
-    verify_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_data/verify/dialog'
+    train_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/train.csv'
+    test_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/test.csv'
+    verify_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/verify.csv'
     
-    train_data = QA_Dataset(train_label_path, train_file_path)
-    test_data = QA_Dataset(test_label_path, test_file_path)
-    val_data = QA_Dataset(verify_label_path, verify_file_path)
+    label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosei/moseilabel.csv'
+    
+    train_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/train_splits_wav'
+    test_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/output_repeated_splits_test_wav'
+    verify_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/dev_splits_complete_wav'
+    
+    file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosei/wav'
+    
+    train_data = Dataset_mosi(label_path, file_path, mode='train')
+    test_data = Dataset_mosi(label_path, file_path, mode='test')
+    val_data = Dataset_mosi(label_path, file_path, mode='valid')
+    
+    # train_data = Dataset_sims(label_path, file_path, mode='train')
+    # test_data = Dataset_sims(label_path, file_path, mode='test')
+    # val_data = Dataset_sims(label_path, file_path, mode='valid')
+    
+    # train_data = MELDDataset(train_label_path, train_file_path)
+    # test_data = MELDDataset(test_label_path, test_file_path)
+    # val_data = MELDDataset(verify_label_path, verify_file_path)
     
     
     train_loader = DataLoader(
-        train_data, batch_size=batch_size)
+        train_data, batch_size=batch_size,shuffle=True)
     test_loader = DataLoader(
-        test_data,  batch_size=batch_size)
-    val_loader = DataLoader(val_data,  batch_size=batch_size)
+        test_data,  batch_size=batch_size,shuffle=True)
+    val_loader = DataLoader(val_data,  batch_size=batch_size, shuffle=True)
     return train_loader, test_loader, val_loader

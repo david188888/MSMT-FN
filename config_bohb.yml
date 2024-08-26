@@ -1,15 +1,13 @@
 searchSpaceFile: search_space.json
-trialCommand: python3 run.py
-trialGpuNumber: 0
+trialCommand: HF_ENDPOINT='https://hf-mirror.com' python run.py
 trialConcurrency: 1
-maxExperimentDuration: 10h
-maxTrialNumber: 1000
-advisor:
-  name: BOHB
+logLevel: debug
+maxExperimentDuration: 40h
+maxTrialNumber: 30
+tuner:  
+  name: random
   classArgs:
-    max_budget: 27
-    min_budget: 1
-    eta: 3
     optimize_mode: maximize
+    seed: 100
 trainingService:  # For other platforms, check mnist-pytorch example
   platform: local

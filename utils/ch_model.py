@@ -1,11 +1,12 @@
 import torch
 from torch import nn
-from transformers import RobertaModel, HubertModel, AutoModel
+from transformers import RobertaModel, HubertModel, AutoModel, Data2VecAudioModel
 from utils.cross_attn_encoder import CMELayer, AttnConfig, GRU_context, GruConfig, Bottleneck, FCLayer
 # from positional_encodings.torch_encodings import PositionalEncodingPermute1D, Summer
 import torch.nn.functional as F
 import gc
-
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -14,11 +15,14 @@ class rob_hub_cme(nn.Module):
     def __init__(self, config):        
         super().__init__()
 
-        # load text pre-trained model
-        self.roberta_model = AutoModel.from_pretrained("hfl/chinese-roberta-wwm-ext")
+        # # load text pre-trained model
+        # self.roberta_model = AutoModel.from_pretrained("hfl/chinese-roberta-wwm-ext")
 
-        # load audio pre-trained model
-        self.hubert_model = AutoModel.from_pretrained('TencentGameMate/chinese-hubert-base')
+        # # load audio pre-trained model
+        # self.hubert_model = AutoModel.from_pretrained('TencentGameMate/chinese-hubert-base')
+        
+        self.roberta_model = RobertaModel.from_pretrained('roberta-base')
+        self.data2vec_model = Data2VecAudioModel.from_pretrained("facebook/data2vec-audio-base")
         
         # cls embedding layers
         self.text_cls_emb = nn.Embedding(num_embeddings=1, embedding_dim=768)
@@ -45,16 +49,16 @@ class rob_hub_cme(nn.Module):
         
         self.fc_layer = FCLayer(config)
         # multi-head attention
-        self.multi_head_attn = nn.MultiheadAttention(embed_dim=768, num_heads=12, dropout=config.dropout)
+        # self.multi_head_attn = nn.MultiheadAttention(embed_dim=768, num_heads=12, dropout=config.dropout)
 
         
         
         # last linear output layer
         self.fused_output_layers = nn.Sequential(
                 nn.Dropout(config.dropout),
-                nn.Linear(768, 512),
+                nn.Linear(config.hidden_size_gru*2, 128),
                 nn.ReLU(),
-                nn.Linear(512, 5),
+                nn.Linear(128, 1),
             )
     def prepend_cls(self, inputs, masks, layer_name):
         if layer_name == 'text':
@@ -84,11 +88,10 @@ class rob_hub_cme(nn.Module):
             # del T_hidden_states, T_features, raw_output
             # torch.cuda.empty_cache()
 
-        
-
                     
         # audio feature extraction
-        audio_out = self.hubert_model(audio_inputs, audio_mask, output_attentions=True)
+        # audio_out = self.hubert_model(audio_inputs, audio_mask, output_attentions=True)
+        audio_out = self.data2vec_model(audio_inputs, audio_mask, output_attentions=True)
         A_hidden_states = audio_out.last_hidden_state
         # average over unmasked audio tokens
         # A_features = []
@@ -115,6 +118,9 @@ class rob_hub_cme(nn.Module):
         
         text_inputs, text_attn_mask = self.prepend_cls(T_hidden_states, text_mask, 'text') # add cls token
         audio_inputs, audio_attn_mask = self.prepend_cls(A_hidden_states, audio_mask_new, 'audio') # add cls token
+        
+        # del raw_output, T_hidden_states, A_hidden_states, audio_out, audio_mask_new
+        # torch.cuda.empty_cache()
 
         # pass through CME layers
 
@@ -130,24 +136,22 @@ class rob_hub_cme(nn.Module):
             bottle.append(lang_bottleneck)
             new_bottleneck = torch.mean(torch.stack(bottle, dim=-1), dim=-1)
             expanded_bottleneck = new_bottleneck
-            del new_bottleneck
+            # del new_bottleneck
             torch.cuda.empty_cache()
-        
-
         fusion_output = self.fc_layer(fusion_output)
         fusion_output = fusion_output.view(batch_size, dialog_len, -1)
 
         # pass through GRU layers
-        gru_output = self.GRU_layers(fusion_output)
+        gru_output = self.GRU_layers(fusion_output).squeeze(0)
         # gru_output = gru_output.unsqueeze(1)
-        del fusion_output, text_attn_mask, audio_inputs, audio_attn_mask, T_hidden_states, A_hidden_states, audio_out, raw_output
-        torch.cuda.empty_cache()
+        # del fusion_output, text_attn_mask, audio_inputs, audio_attn_mask, text_inputs, expanded_bottleneck,text_outputs
+        # torch.cuda.empty_cache()
         # gru_output = gru_output.unsqueeze(1)
         # output,_ = self.multi_head_attn(gru_output, gru_output, gru_output)
         # output = output.squeeze(1)
         fused_output = self.fused_output_layers(gru_output)
-        
         gc.collect()
+        # print(f"shape of fused_output: {fused_output.shape}")
             
         return fused_output
         

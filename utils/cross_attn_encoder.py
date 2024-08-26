@@ -64,7 +64,7 @@ class GruConfig(object):
                  input_dim=768,
                  num_layers=2,
                  bidirectional=True,
-                 hidden_size=128,
+                 hidden_size=384,
                  output_size=768):
         self.input_dim = input_dim
         self.num_layers = num_layers
@@ -250,8 +250,8 @@ class BottleneckFusion(nn.Module):
         input_out_fusion = output_fusion[:, :t_mod_lang]
         updated_bottleneck_fusion = output_fusion[:, t_mod_lang:]        
         updated_bottleneck_lang = output_lang[:, t_mod_audio:]
-        del in_mod_fusion, in_mod_lang, out_mod_fusion, out_mod_lang, output_lang, output_fusion
-        torch.cuda.empty_cache()  
+        # del in_mod_fusion, in_mod_lang, out_mod_fusion, out_mod_lang, output_lang, output_fusion
+        # torch.cuda.empty_cache()  
 
         return input_out_fusion, updated_bottleneck_fusion, updated_bottleneck_lang
 
@@ -334,7 +334,7 @@ class BertLayer(nn.Module):
 class FCLayer(nn.Module):
     def __init__(self, config):
         super(FCLayer, self).__init__()
-        self.fc = nn.Linear(config.input_dim, config.output_dim)
+        self.fc = nn.Linear(97*768, 768)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(config.dropout)
     
@@ -358,24 +358,28 @@ class GRU_context(nn.Module):
         self.n_directions = 2 if self.bidirectional else 1
         
         self.gru = nn.GRU(input_size = self.input_dim, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first = True, bidirectional = self.bidirectional)
-        self.fc = nn.Sequential(
-            nn.Linear(self.hidden_size*self.n_directions, self.output_size),
-            nn.ReLU(),
-            # nn.Dropout(self.dropout),
-        )
+        # self.fc = nn.Sequential(
+        #     nn.Linear(self.hidden_size*self.n_directions, self.output_size),
+        #     nn.ReLU(),
+        #     # nn.Dropout(self.dropout),
+        # )
+        # self.fc = nn.Sequential(
+        #     nn.Linear
+        # )
         # self.fc2 = nn.Linear(768, self.output_size)
         
     
     def forward(self, inputs):
         # print(self.input_dim)
-        _, hidden = self.gru(inputs)
+        output, hidden = self.gru(inputs)
         # print(f"the shape of hidden is :{hidden.size()}")
-        forward_hidden = hidden[-2, :, :]
-        backward_hidden = hidden[-1, :, :]
-        concat_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
+        # forward_hidden = hidden[-2, :, :]
+        # backward_hidden = hidden[-1, :, :]
+        # concat_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
         # print(f"the shape of concat_hidden is :{concat_hidden.size()}")
-        fc_output_1 = self.fc(concat_hidden)
-        return fc_output_1
+        # fc_output_1 = self.fc(concat_hidden)
+        # fc_output_1 = self.fc(output)
+        return output
     
     
 class Bottleneck(nn.Module):
