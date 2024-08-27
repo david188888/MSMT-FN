@@ -23,6 +23,36 @@ class MetricsTop():
         return np.sum(np.round(y_pred) == np.round(y_true)) / float(len(y_true))
     
     
+    
+    def __meld_classification(self, y_pred, y_true):
+        '''
+        计算meld数据集的分类准确率, 先计算七分类准确率，再计算每个类别的准确率，最后计算加权F1分数
+        '''
+        
+        y_pred = y_pred.cpu().detach().numpy()
+        y_true = y_true.cpu().detach().numpy()
+        
+        # 计算七分类准确率
+        Mult_acc_7 = self.__multiclass_acc(y_pred, y_true)
+
+        # 计算每个类别的准确率
+        class_acc = []
+        for i in range(7):
+            idx = np.where(y_true == i)
+            class_acc.append(self.__multiclass_acc(y_pred[idx], y_true[idx]))
+            
+        # 计算加权F1分数
+        f_score = f1_score(y_pred=np.argmax(y_pred, axis=1), y_true=y_true, average='weighted')
+        
+        eval_results = {
+            "Mult_acc_7": round(Mult_acc_7, 4),
+            "F1_score_7": round(f_score, 4),
+            "Class_acc": [round(acc, 4) for acc in class_acc]
+        }
+        
+        return eval_results
+    
+    
     def __mosi_classification(self, y_pred, y_true):
         test_preds = y_pred.cpu().detach().numpy()
         test_truth = y_true.cpu().detach().numpy()
@@ -214,6 +244,7 @@ class MetricsTop():
         # eval_results = self.__mosi_classification(y_pred, y_true)
         eval_results = self.__eval_mosei_regression(y_pred, y_true)
         # eval_results = self.__eval_sims_regression(y_pred, y_true)
+        # eval_results = self.__meld_classification(y_pred, y_true)
         return eval_results
     
     
