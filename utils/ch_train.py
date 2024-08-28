@@ -274,8 +274,6 @@ def ChRun(config):
             torch.save(model.state_dict(), config.model_save_path+f'{config.dataset_name}_acc.pth')
         if epoch - best_epoch >= config.early_stop:
             break
-        if epoch >= large_epoch:
-            break
     
     model.eval()
     model.load_state_dict(torch.load(config.model_save_path+f'{config.dataset_name}_acc.pth'))        
