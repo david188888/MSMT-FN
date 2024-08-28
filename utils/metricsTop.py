@@ -34,12 +34,12 @@ class MetricsTop():
         
         # 计算七分类准确率
         Mult_acc_7 = self.__multiclass_acc(y_pred, y_true)
-
+        emotion_labels = {0: 'happy', 1: 'sad', 2: 'angry', 3: 'neutral', 4: 'surprise', 5: 'fear', 6: 'disgust'}
         # 计算每个类别的准确率
-        class_acc = []
+        class_acc = {}
         for i in range(7):
             idx = np.where(y_true == i)
-            class_acc.append(self.__multiclass_acc(y_pred[idx], y_true[idx]))
+            class_acc[emotion_labels[i]] = round(self.__multiclass_acc(y_pred[idx], y_true[idx]), 4)
             
         # 计算加权F1分数
         f_score = f1_score(y_pred=np.argmax(y_pred, axis=1), y_true=y_true, average='weighted')
@@ -47,7 +47,7 @@ class MetricsTop():
         eval_results = {
             "Mult_acc_7": round(Mult_acc_7, 4),
             "F1_score_7": round(f_score, 4),
-            "Class_acc": [round(acc, 4) for acc in class_acc]
+            "Class_acc": class_acc
         }
         
         return eval_results

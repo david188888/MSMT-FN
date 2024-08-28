@@ -49,7 +49,7 @@ class ChConfig(object):
                  batch_size=1,
                  num_hidden_layers=2,
                  n_bottlenecks = 2,
-                 dataset_name = 'sims',
+                 dataset_name = 'mosei',
                  bottleneck_layers =2,
                  scheduler_type = 'fixed',
                  num_layers_gru = 2,
@@ -95,7 +95,7 @@ class ChTrainer():
     def do_train(self, model, data_loader):
         model.train()
         optimizer = torch.optim.AdamW(
-            model.parameters(), lr=self.config.learning_rate)
+            model.parameters(), lr=self.config.learning_rate, weight_decay=0.01)
         large_epoch = self.config.epochs
         total_steps = len(data_loader) * large_epoch
         # scheduler = get_linear_schedule_with_warmup(
