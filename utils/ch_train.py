@@ -15,9 +15,9 @@ import nni
 
 from datetime import datetime
 TIMESTAMP = "{0:%Y-%m-%dT%H-%M-%S/}".format(datetime.now())
-train_log_dir = 'logs/mosei/train/' + TIMESTAMP
+train_log_dir = 'logs/meld/train/' + TIMESTAMP
 # test_log_dir = 'logs/sims/test/'   + TIMESTAMP
-val_log_dir = 'logs/mosei/val/' + TIMESTAMP
+val_log_dir = 'logs/meld/val/' + TIMESTAMP
 
 
 writer_train = SummaryWriter(train_log_dir)
@@ -49,7 +49,7 @@ class ChConfig(object):
                  batch_size=1,
                  num_hidden_layers=2,
                  n_bottlenecks = 2,
-                 dataset_name = 'mosei',
+                 dataset_name = 'meld',
                  bottleneck_layers =2,
                  scheduler_type = 'fixed',
                  num_layers_gru = 2,
@@ -80,8 +80,8 @@ class ChTrainer():
     def __init__(self, config):
 
         self.config = config
-        # self.criterion = nn.CrossEntropyLoss()
-        self.criterion = nn.L1Loss()
+        self.criterion = nn.CrossEntropyLoss()
+        # self.criterion = nn.L1Loss()
         self.metrics = MetricsTop().getMetics()
         self.scheduler_type = config.scheduler_type
         
@@ -112,15 +112,15 @@ class ChTrainer():
                 audio_mask = batch["audio_masks"].squeeze(0).to(device)
                 targets = batch["targets"].squeeze(0).to(device)
                 batch_size = self.config.batch_size
-                
-                # print("size of target", targets.size())
-
-                outputs = model(text_inputs, text_mask, audio_inputs, audio_mask, batch_size)
-                targets = targets.unsqueeze(dim=1)
-                # Compute the training loss.
                 loss = 0.0
-                # loss = self.criterion(
-                #     outputs, targets.long().to(device).view(-1))
+                outputs = model(text_inputs, text_mask, audio_inputs, audio_mask, batch_size)
+                # targets = targets.unsqueeze(dim=1)
+                # Compute the training loss.
+                
+                loss = self.criterion(
+                    outputs, targets.long().to(device).view(-1))
+                # print(f"output shape is {outputs.shape}")
+
                 loss = self.criterion(outputs, targets)
                 
                 # 实现L1正则化
@@ -144,6 +144,31 @@ class ChTrainer():
                 # optimizer.zero_grad()
                 total_loss += loss.item()*text_inputs.size(0)
                 input_size += text_inputs.size(0)
+                
+                
+
+                # class_loss = 0.0
+                # output_five, output_four, output_three, output_two = model(text_inputs, text_mask, audio_inputs, audio_mask, batch_size)
+                # print("success")
+                # output = {
+                #     "five_class": output_five.unsqueeze(0),
+                #     "four_class": output_four.unsqueeze(0),
+                #     "three_class": output_three.unsqueeze(0),
+                #     "two_class": output_two.unsqueeze(0)
+                # }
+                # targets = batch['targets']
+                
+                
+                
+                # for key in output.keys():
+                #     loss = self.criterion(output[key], targets[key].to(device))
+                #     class_loss += loss
+                    
+                # class_loss.backward()
+                # print("loss backward success")
+                # total_loss += class_loss.item()*text_inputs.size(0)
+                # input_size += text_inputs.size(0)
+                
                 if (i+1) % accumulation_steps == 0:
                     optimizer.step()
                     optimizer.zero_grad()  
@@ -160,6 +185,20 @@ class ChTrainer():
         model.eval()
         y_pred = []
         y_true = []
+        
+        # y_pred = {
+        #     "five_class": [],
+        #     "four_class": [],
+        #     "three_class": [],
+        #     "two_class": []
+        # }
+        
+        # y_true = {
+        #     "five_class": [],
+        #     "four_class": [],
+        #     "three_class": [],
+        #     "two_class": []
+        # }
         total_loss = 0
         input_size = 0
         with torch.no_grad():
@@ -171,34 +210,77 @@ class ChTrainer():
                     text_mask = batch["text_masks"].squeeze(0).to(device)
                     audio_mask = batch["audio_masks"].squeeze(0).to(device)
                     targets = batch["targets"].squeeze(0).to(device)
-                    
+                    batch_size = self.config.batch_size
                     # Predictions from 1 batch of data.
                     outputs = model(text_inputs, text_mask,
                                     audio_inputs, audio_mask, self.config.batch_size)
-                    targets = targets.unsqueeze(dim=1)
+                    # targets = targets.unsqueeze(dim=1)
                     # Compute the training loss.
                     loss = 0.0
                     loss = self.criterion(
                         outputs, targets)
                     total_loss += float(loss.item()*text_inputs.size(0))
                     input_size += text_inputs.size(0)
+                    
+                    # class_loss = 0.0
+                    # output_five, output_four, output_three, output_two = model(text_inputs, text_mask, audio_inputs, audio_mask, batch_size)
+                    # output = {
+                    #     "five_class": output_five.unsqueeze(0),
+                    #     "four_class": output_four.unsqueeze(0),
+                    #     "three_class": output_three.unsqueeze(0),
+                    #     "two_class": output_two.unsqueeze(0)
+                    # }
+                    # targets = batch['targets']
+                    # # 将target 所有的值都转换为cpu
+                    # for key in targets.keys():
+                    #     targets[key] = targets[key].cpu()
+                                            
+                    # for key in output.keys():
+                    #     loss = self.criterion(output[key], targets[key].to(device))
+                    #     class_loss += loss
+                    #     y_pred[key].append(output[key].cpu())
+                    #     y_true[key].append(targets[key].cpu())
+                        
+                    # total_loss += class_loss.item()*text_inputs.size(0)
+                    # input_size += text_inputs.size(0)
 
                     # add predictions
-                    y_pred.append(outputs.cpu())
-                    y_true.append(targets.cpu())
+                    y_pred.append(outputs)
+                    y_true.append(targets)
             
 
         total_loss = round(total_loss / input_size, 4)
         print(mode+" >> loss: ", total_loss)
-
         eval_results = {}
         pred = torch.cat(y_pred,dim=0) 
         true = torch.cat(y_true,dim=0)
-
         
         results = self.metrics(pred, true)
-
         eval_results = results
+        
+        
+        
+        # y_pred_final = {
+        #     "five_class": torch.cat(y_pred['five_class'], dim=0),
+        #     "four_class": torch.cat(y_pred["four_class"], dim=0),
+        #     "three_class": torch.cat(y_pred['three_class'],dim = 0),
+        #     "two_class": torch.cat(y_pred["two_class"], dim=0)
+        # }
+        
+        # y_true_final = {
+        #     "five_class": torch.cat(y_true['five_class'], dim=0),
+        #     "four_class": torch.cat(y_true["four_class"], dim=0),
+        #     "three_class": torch.cat(y_true['three_class'], dim=0),
+        #     "two_class": torch.cat(y_true["two_class"], dim=0)
+        # }
+
+        
+        # for key in y_pred_final.keys():
+        #     result = self.metrics(y_pred_final[key], y_true_final[key])
+        #     # 分别加上各个类别的准确率和F1值
+        #     for k in result.keys():
+        #         eval_results[key + "_" + k] = result[k]
+
         eval_results['Loss'] = total_loss                        
         return eval_results
     
@@ -223,7 +305,6 @@ def ChRun(config):
 
     trainer = ChTrainer(config)
 
-    large_epoch = config.epochs
     lowest_eval_loss = 100
     highest_eval_acc = 0
     epoch = 0
@@ -247,14 +328,18 @@ def ChRun(config):
         
         eval_results = trainer.do_test(model, val_loader, "VAL")
         print('%s: >> ' %('VAL ') + dict_to_str(eval_results))
-        writer_val.add_scalar('Loss/VAL', eval_results['Loss'], epoch)
-        writer_val.add_scalar('Has0_acc_2/VAL', eval_results['Has0_acc_2'], epoch)
-        writer_val.add_scalar('Has0_F1_score/VAL', eval_results['Has0_F1_score'], epoch)
-        writer_val.add_scalar('Non0_acc_2/VAL', eval_results['Non0_acc_2'], epoch)
-        writer_val.add_scalar('Non0_F1_score/VAL', eval_results['Non0_F1_score'], epoch)
+        # writer_val.add_scalar('Loss/VAL', eval_results['Loss'], epoch)
+        # writer_val.add_scalar('Has0_acc_2/VAL', eval_results['Has0_acc_2'], epoch)
+        # writer_val.add_scalar('Has0_F1_score/VAL', eval_results['Has0_F1_score'], epoch)
+        # writer_val.add_scalar('Non0_acc_2/VAL', eval_results['Non0_acc_2'], epoch)
+        # writer_val.add_scalar('Non0_F1_score/VAL', eval_results['Non0_F1_score'], epoch)
+        # writer_val.add_scalar('Mult_acc_7/VAL', eval_results['Mult_acc_7'], epoch)
+        # writer_val.add_scalar('Mult_acc_5/VAL', eval_results['Mult_acc_5'], epoch)
+        # writer_val.add_scalar('MAE', eval_results['MAE'], epoch)
+        
         writer_val.add_scalar('Mult_acc_7/VAL', eval_results['Mult_acc_7'], epoch)
-        writer_val.add_scalar('Mult_acc_5/VAL', eval_results['Mult_acc_5'], epoch)
-        writer_val.add_scalar('MAE', eval_results['MAE'], epoch)
+        writer_val.add_scalar('F1_score_7/VAL', eval_results['F1_score_7'], epoch)
+        
         # print(dict_to_str(eval_results['M_result']))
         # mode = "VAL"
         # total_loss_val = eval_results['Loss']
@@ -269,8 +354,8 @@ def ChRun(config):
             lowest_eval_loss = eval_results['Loss']
             torch.save(model.state_dict(), config.model_save_path+f'{config.dataset_name}_loss.pth')
             best_epoch = epoch
-        if eval_results['Has0_acc_2']>=highest_eval_acc:
-            highest_eval_acc = eval_results['Has0_acc_2']
+        if eval_results['Mult_acc_7']>=highest_eval_acc:
+            highest_eval_acc = eval_results['Mult_acc_7']
             torch.save(model.state_dict(), config.model_save_path+f'{config.dataset_name}_acc.pth')
         if epoch - best_epoch >= config.early_stop:
             break
@@ -285,10 +370,10 @@ def ChRun(config):
     print('%s: >> ' %('TEST (lowest val loss) ') + dict_to_str(test_results_acc))
     
     
-    # 将结果存进对应的文件
-    with open('results/mosei/test_results.txt', 'w+') as f:
-        f.write('TEST (val acc) ' + ', '.join(map(str, test_results_acc)) + '\n')
-        f.write('TEST (val loss) ' + dict_to_str(test_results_loss) + '\n')
+    # # 将结果存进对应的文件
+    # with open('results/mosei/test_results.txt', 'w+') as f:
+    #     f.write('TEST (val acc) ' + ', '.join(map(str, test_results_acc)) + '\n')
+    #     f.write('TEST (val loss) ' + dict_to_str(test_results_loss) + '\n')
     
     writer_train.close()
     writer_val.close()

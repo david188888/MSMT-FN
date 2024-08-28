@@ -200,51 +200,14 @@ class MetricsTop():
         print(f"test_preds: {test_preds[:5]}")
     
         
-        
-        # mae = np.mean(np.absolute(test_preds_label - test_truth_label)).astype(np.float64)
-
-        # 计算相关系数
-        # corr = np.corrcoef(test_preds_label, test_truth_label)[0][1]
-
-
-        
-        
-            # 计算二分类准确度
-        # test_truth_binary = (test_truth_label < 2).astype(int)  # A, B -> 1; C, D, E -> 0
-        # test_preds_binary = (test_preds_label < 2).astype(int)
-        # mult_a2 = accuracy_score(test_truth_binary, test_preds_binary)
-        
-        # 计算四分类准确度
-        def map_to_four_class(label):
-            if label == 3 or label == 4:
-                return 3
-            elif label == 0:
-                return 0
-            elif label == 1:
-                return 1
-            elif label == 2:
-                return 2
-        
-    # 计算三分类准确度
-        def map_to_three_class(label):
-            if label == 0:
-                return 0  # A -> 0
-            elif label == 1 or label == 2:
-                return 1  # B, C -> 1
-            elif label == 3 or label == 4:
-                return 2  # D, E -> 2
-        # test_truth_four_class = np.array([map_to_four_class(label) for label in test_truth_label])
-        # test_preds_four_class = np.array([map_to_four_class(label) for label in test_preds_label])
-        # mult_a4 = accuracy_score(test_truth_four_class, test_preds_four_class)
-        
-        # test_truth_three_class = np.array([map_to_three_class(label) for label in test_truth_label])
-        # test_preds_three_class = np.array([map_to_three_class(label) for label in test_preds_label])
-        # mult_a3 = accuracy_score(test_truth_three_class, test_preds_three_class)
-        
+        # eval_results = {
+        #     "Acc": round(accuracy_score(y_pred=test_preds_label, y_true=test_truth_label), 4),
+        #     "F1": round(f1_score(y_pred=test_preds_label, y_true=test_truth_label, average='weighted'), 4)
+        # }   
         # eval_results = self.__mosi_classification(y_pred, y_true)
-        eval_results = self.__eval_mosei_regression(y_pred, y_true)
+        # eval_results = self.__eval_mosei_regression(y_pred, y_true)
         # eval_results = self.__eval_sims_regression(y_pred, y_true)
-        # eval_results = self.__meld_classification(y_pred, y_true)
+        eval_results = self.__meld_classification(y_pred, y_true)
         return eval_results
     
     

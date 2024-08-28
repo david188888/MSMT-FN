@@ -14,46 +14,15 @@ import numpy as np
 import os
 
 
-
-# class DynamicBatchSampler(BatchSampler):
-#     def __init__(self,label_csv_path,shuffle=False):
-#         self.audio_directory = label_csv_path
-#         self.shuffle = shuffle
-        
-#         df = pd.read_csv(label_csv_path)
-        
-#         #创建一个从电话号码到所有对话段的索引的列表的映射
-#         self.phone_to_dialogue = {}
-#         phone_list = list(df['phone'])
-#         for idx, phone in enumerate(phone_list):
-#             if phone not in self.phone_to_dialogue:
-#                 self.phone_to_dialogue[phone] = []
-#             self.phone_to_dialogue[phone].append(idx
-#             )
-            
-            
-#     def __iter__(self):
-#         dialogue_keys = list(self.phone_to_dialogue.keys())
-#         if self.shuffle:
-#             # 如果启用洗牌，随机打乱电话号码键列表
-#             random.shuffle(dialogue_keys)
-        
-#         for key in dialogue_keys:
-#             segment_indices = self.phone_to_dialogue[key]
-#             print(f"Yielding batch for {key} with size {len(segment_indices)}")
-#             yield segment_indices
-            
-#     def __len__(self):
-#         return len(self.phone_to_dialogue)
-
-
 class QA_Dataset(torch.utils.data.Dataset):
     def __init__(self, csv_path, audio_directory):
         df = pd.read_csv(csv_path)
 
         # store the label and text
-        encoder = LabelEncoder()
-        self.targets = encoder.fit_transform(list(df['label']))
+        label = ['A', 'B', 'C', 'D', 'E']
+        custom_mapping = {label: idx for idx, label in enumerate(label)}
+        self.targets = df['label'].map(custom_mapping)
+
         self.phone_groups = df.groupby('phone')
         self.texts = df['text'].tolist()
         self.tokenizer = AutoTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
@@ -64,19 +33,34 @@ class QA_Dataset(torch.utils.data.Dataset):
             feature_size=1, sampling_rate=8000, padding_value=0.0, do_normalize=True, return_attention_mask=True
         )
         self.unique_phones = list(self.phone_groups.indices.keys())
-
+        
+    def convert_label(self, five_label):
+        class_list = []
+        class_list.append(int(five_label))
+        four_class_mapping = {0: 0, 1:1, 2:2, 3:3, 4:3}
+        three_class_mapping = {0:0, 1:1, 2:1, 3:2, 4:2}
+        two_class_mapping = {0:0, 1:0, 2:0, 3:1, 4:1}
+        
+        four_class = four_class_mapping[int(five_label)]
+        class_list.append(four_class)
+        three_class = three_class_mapping[int(five_label)]
+        class_list.append(three_class)
+        two_class = two_class_mapping[int(five_label)]
+        class_list.append(two_class)
+        
+        return class_list
+        
+        
     def __getitem__(self, index):
         phone = self.unique_phones[index]
         # print(f"the phone is {phone}")
         indeces = self.phone_groups.indices[phone]
-        threshold = 10
+        threshold = 6
         batches = []
-        # print(f"the indeces is {indeces}")
-        # extract text feature
-        # tokenize text
+        
         tokenized_text = [self.tokenizer(
             str(self.texts[i]),
-            max_length=128,
+            max_length=199,
             padding="max_length",
             truncation=True,
             add_special_tokens=True,
@@ -99,14 +83,31 @@ class QA_Dataset(torch.utils.data.Dataset):
 
         # extract audio features
             features = self.feature_extractor(
-                soundData, sampling_rate=8000, max_length=160000,
+                soundData, sampling_rate=8000, max_length=320000,
                 return_attention_mask=True, truncation=True, padding="max_length"
             )
             audio_features.append(torch.tensor(np.array(features['input_values']), dtype=torch.float32).squeeze())
             audio_masks.append(torch.tensor(np.array(features['attention_mask']), dtype=torch.long).squeeze())
         audio_features = torch.stack(audio_features)
         audio_masks = torch.stack(audio_masks)
-        target = torch.tensor(self.targets[indeces[0]],dtype=torch.float32)
+        # target = torch.tensor(self.targets[indeces[0]],dtype=torch.long)
+        # target需要包含四张不同的评判标准对应的标签
+        #第一种是正常的五分类不需要变化
+        #第二种是将五分类转换为四分类,四分类：A为一类，B为一类，C为一类，D/E为一类
+        #第三种是将五分类转换为三分类，三分类：A为一类，B/C为一类，D/E为一类
+        #第四种是将五分类转换为二分类，二分类：A/B为一类，CDE为一类
+        
+        # target = torch.tensor(self.targets[indeces[0]],dtype=torch.float32).unsqueeze(0)
+        five_class = self.targets[indeces[0]]
+        class_list = self.convert_label(five_class)
+        
+        target = {
+            "five_class":torch.tensor(class_list[0],dtype=torch.long),
+            "four_class":torch.tensor(class_list[1],dtype=torch.long),
+            'three_class':torch.tensor(class_list[2],dtype=torch.long),
+            "two_class": torch.tensor(class_list[3],dtype=torch.long)
+        }
+        
         
         if len(indeces) <= threshold:
             batch = {
@@ -117,13 +118,13 @@ class QA_Dataset(torch.utils.data.Dataset):
                 "targets": target
             }
             batches.append(batch)
-        else:
+        elif (len(indeces)>threshold and len(indeces)<=2*threshold):
             first_batch = {
                 "text_tokens": text_tokens[:threshold,:],
                 "text_masks": text_masks[:threshold,:],
                 "audio_inputs": audio_features[:threshold,:],
                 "audio_masks": audio_masks[:threshold,:],
-                "targets": target[:threshold]
+                "targets": target
             }
             
             second_batch = {
@@ -131,62 +132,37 @@ class QA_Dataset(torch.utils.data.Dataset):
                 "text_masks": text_masks[threshold:,:],
                 "audio_inputs": audio_features[threshold:,:],
                 "audio_masks": audio_masks[threshold:,:],
-                "targets": target[threshold:]
+                "targets": target
             }
             batches.extend([first_batch, second_batch])
+            
+        elif (len(indeces)>2*threshold and len(indeces)<=3*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:,:],
+                "text_masks": text_masks[2*threshold:,:],
+                "audio_inputs": audio_features[2*threshold:,:],
+                "audio_masks": audio_masks[2*threshold:,:],
+                "targets": target
+            }
+            batches.extend([first_batch, second_batch, third_batch])
         return batches
 
     def __len__(self):
         return len(self.unique_phones)
-    
-    # def collate_fn(batch):
-    #     # sample = batch[0]
-    #     # organize batch
-        
-    #     text_tokens = []
-    #     text_masks = []
-    #     audio_inputs = []
-    #     audio_masks = []
-    #     targets = []
-        
-    #     for i in range(len(batch)):
-    #         # text
-    #         text_tokens.append(batch[i]['text_tokens'])
-    #         text_masks.append(batch[i]['text_masks'])
-    #         # audio
-    #         audio_inputs.append(batch[i]['audio_inputs'])
-    #         audio_masks.append(batch[i]['audio_masks'])
-
-    #     # labels
-    #         targets.append(batch[i]['targets'])
-
-        
-    #     text_tokens = torch.nn.utils.rnn.pad_sequence([tt.clone().detach().to(dtype=torch.long) for tt in text_tokens], batch_first=True)
-    #     text_masks = torch.nn.utils.rnn.pad_sequence([tm.clone().detach().to(dtype=torch.long) for tm in text_masks],batch_first=True)
-    #     audio_inputs = torch.nn.utils.rnn.pad_sequence([ai.clone().detach() for ai in audio_inputs], batch_first=True)
-    #     audio_masks = torch.nn.utils.rnn.pad_sequence([am.clone().detach() for am in audio_masks],batch_first=True)
-        
-        
-    #     # text_tokens = sample['text_tokens'].clone().detach().to(dtype=torch.long).squeeze()
-    #     # text_masks = sample['text_masks'].clone().detach().to(dtype=torch.long).squeeze()
-    #     # audio_inputs = sample['audio_inputs'].clone().detach().squeeze()
-    #     # audio_masks = sample['audio_masks'].clone().detach().squeeze()
-
-        
-
-
-    #     return {
-    #         # text
-    #         "text_tokens": text_tokens,
-    #         "text_masks": text_masks,
-    #         # audio
-    #         "audio_inputs": audio_inputs,
-    #         "audio_masks": audio_masks,
-    #         # labels
-    #         "targets": 
-    #             torch.tensor(targets, dtype=torch.float32),
-    #     }
-    
 
 class MELDDataset(torch.utils.data.Dataset):
     def __init__(self, csv_file, audio_dir):
@@ -222,7 +198,7 @@ class MELDDataset(torch.utils.data.Dataset):
         dialog_id = self.unqiue_dialog_ids[idx]
         indeces = self.dialog_group.indices[dialog_id]
 
-        target = torch.tensor([self.target[i] for i in indeces],dtype=torch.float)
+        target = torch.tensor([self.target[i] for i in indeces],dtype=torch.long)
 
         # 处理文本
         tokenized_text = [self.tokenizer(
@@ -288,24 +264,7 @@ class MELDDataset(torch.utils.data.Dataset):
             
         return batches
             
-            
-            
-
         
-    # def collate_fn(batch):
-    #     sample = batch[0]
-    #     text_tokens = sample['text_tokens'].clone().detach().to(dtype=torch.long).squeeze()
-    #     text_masks = sample['text_masks'].clone().detach().to(dtype=torch.long).squeeze()
-    #     audio_inputs = sample['audio_inputs'].clone().detach().squeeze()
-    #     audio_masks = sample['audio_masks'].clone().detach().squeeze()
-        
-    #     return {
-    #         "text_tokens": text_tokens,
-    #         "text_masks": text_masks,
-    #         "audio_inputs": audio_inputs,
-    #         "audio_masks": audio_masks,
-    #         "targets": torch.tensor(sample['targets'], dtype=torch.float32)
-    #     }
 
 class Dataset_sims(torch.utils.data.Dataset):
     # Argument List
@@ -822,17 +781,31 @@ def data_loader(batch_size):
     
     file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosei/wav'
     
-    train_data = Dataset_mosi(label_path, file_path, mode='train')
-    test_data = Dataset_mosi(label_path, file_path, mode='test')
-    val_data = Dataset_mosi(label_path, file_path, mode='valid')
+    # qa_train_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train'
+    # qa_test_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_test'
+    # qa_verify_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_verify'
+    
+    # qa_train_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train.csv'
+    # qa_test_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_test.csv'
+    # qa_verify_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_verify.csv'
+    
+    # train_data = QA_Dataset(qa_train_label, qa_train_file)
+    # test_data = QA_Dataset(qa_test_label, qa_test_file)
+    # val_data = QA_Dataset(qa_verify_label, qa_verify_file)
+    
+    # train_data = Dataset_mosi(label_path, file_path, mode='train')
+    # test_data = Dataset_mosi(label_path, file_path, mode='test')
+    # val_data = Dataset_mosi(label_path, file_path, mode='valid')
     
     # train_data = Dataset_sims(label_path, file_path, mode='train')
     # test_data = Dataset_sims(label_path, file_path, mode='test')
     # val_data = Dataset_sims(label_path, file_path, mode='valid')
     
-    # train_data = MELDDataset(train_label_path, train_file_path)
-    # test_data = MELDDataset(test_label_path, test_file_path)
-    # val_data = MELDDataset(verify_label_path, verify_file_path)
+    train_data = MELDDataset(train_label_path, train_file_path)
+    test_data = MELDDataset(test_label_path, test_file_path)
+    val_data = MELDDataset(verify_label_path, verify_file_path)
+    
+    
     
     
     train_loader = DataLoader(

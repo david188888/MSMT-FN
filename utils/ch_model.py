@@ -15,7 +15,7 @@ class rob_hub_cme(nn.Module):
     def __init__(self, config):        
         super().__init__()
 
-        # # load text pre-trained model
+        # load text pre-trained model
         # self.roberta_model = AutoModel.from_pretrained("hfl/chinese-roberta-wwm-ext")
 
         # # load audio pre-trained model
@@ -58,8 +58,37 @@ class rob_hub_cme(nn.Module):
                 nn.Dropout(config.dropout),
                 nn.Linear(config.hidden_size_gru*2, 128),
                 nn.ReLU(),
-                nn.Linear(128, 1),
+                nn.Linear(128, 7),
+                
+                # nn.Linear(768,512),
+                # nn.ReLU(),
+                # nn.Linear(512, 5),
             )
+        
+        # self.four_class_layer  = nn.Sequential(
+        #         nn.Dropout(config.dropout),
+        #         # nn.Linear(config.hidden_size_gru*2, 128),
+        #         nn.Linear(768,512),
+        #         nn.ReLU(),
+        #         nn.Linear(512, 4),
+        #     )
+        
+        # self.three_class_layer  = nn.Sequential(
+        #         nn.Dropout(config.dropout),
+        #         # nn.Linear(config.hidden_size_gru*2, 128),
+        #         nn.Linear(768,512),
+        #         nn.ReLU(),
+        #         nn.Linear(512, 3),
+        #     )
+        
+        # self.two_class_layer  = nn.Sequential(
+        #         nn.Dropout(config.dropout),
+        #         # nn.Linear(config.hidden_size_gru*2, 128),
+        #         nn.Linear(768,512),
+        #         nn.ReLU(),
+        #         nn.Linear(512, 2),
+        #     )
+        
     def prepend_cls(self, inputs, masks, layer_name):
         if layer_name == 'text':
             embedding_layer = self.text_cls_emb
@@ -150,9 +179,17 @@ class rob_hub_cme(nn.Module):
         # output,_ = self.multi_head_attn(gru_output, gru_output, gru_output)
         # output = output.squeeze(1)
         fused_output = self.fused_output_layers(gru_output)
+        
+        
+        # five_output = self.fused_output_layers(gru_output)
+        # four_output = self.four_class_layer(gru_output)
+        # three_output = self.three_class_layer(gru_output)
+        # two_output = self.two_class_layer(gru_output)
+        
+        
         gc.collect()
         # print(f"shape of fused_output: {fused_output.shape}")
-            
+        # return fused_output
         return fused_output
         
 

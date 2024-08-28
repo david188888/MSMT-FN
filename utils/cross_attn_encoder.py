@@ -64,14 +64,14 @@ class GruConfig(object):
                  input_dim=768,
                  num_layers=2,
                  bidirectional=True,
-                 hidden_size=384,
-                 output_size=768):
+                 output_size=768,
+                 hidden_size=384):
         self.input_dim = input_dim
         self.num_layers = num_layers
         self.bidirectional = bidirectional
         self.hidden_size = hidden_size
         self.output_size = output_size
-        # self.dropout = 0.3
+        self.dropout = 0.1
         
 
 BertLayerNorm = torch.nn.LayerNorm
@@ -334,7 +334,7 @@ class BertLayer(nn.Module):
 class FCLayer(nn.Module):
     def __init__(self, config):
         super(FCLayer, self).__init__()
-        self.fc = nn.Linear(97*768, 768)
+        self.fc = nn.Linear(61*768, 768)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(config.dropout)
     
@@ -354,31 +354,27 @@ class GRU_context(nn.Module):
         self.num_layers = config.num_layers
         self.output_size = config.output_size
         self.bidirectional = config.bidirectional
-        # self.dropout = config.dropout
+        self.dropout = config.dropout
         self.n_directions = 2 if self.bidirectional else 1
         
         self.gru = nn.GRU(input_size = self.input_dim, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first = True, bidirectional = self.bidirectional)
         # self.fc = nn.Sequential(
         #     nn.Linear(self.hidden_size*self.n_directions, self.output_size),
         #     nn.ReLU(),
-        #     # nn.Dropout(self.dropout),
+        #     nn.Dropout(self.dropout),
         # )
-        # self.fc = nn.Sequential(
-        #     nn.Linear
-        # )
-        # self.fc2 = nn.Linear(768, self.output_size)
+
         
     
     def forward(self, inputs):
         # print(self.input_dim)
         output, hidden = self.gru(inputs)
-        # print(f"the shape of hidden is :{hidden.size()}")
+        # # print(f"the shape of hidden is :{hidden.size()}")
         # forward_hidden = hidden[-2, :, :]
         # backward_hidden = hidden[-1, :, :]
         # concat_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
-        # print(f"the shape of concat_hidden is :{concat_hidden.size()}")
         # fc_output_1 = self.fc(concat_hidden)
-        # fc_output_1 = self.fc(output)
+        # # fc_output_1 = self.fc(output)
         return output
     
     
