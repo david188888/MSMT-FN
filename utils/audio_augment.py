@@ -50,8 +50,8 @@ class AudioAugmentation:
 
 
 if __name__ == '__main__':
-    csv_path = "/home/lhy-scnu/mmml/train/dialog_test_11.csv"
-    audio_directory = "/home/lhy-scnu/mmml/train/dialog"
+    csv_path = "/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train.csv"
+    audio_directory = "/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/train_no_silence"
     df = pd.read_csv(csv_path)
     
     encoder = LabelEncoder()
@@ -59,7 +59,7 @@ if __name__ == '__main__':
     texts = list(df['text'])
     phones = list(df['phone'])
     clips_id = list(df['Segment_number'])
-    audio_file_paths = [f"{audio_directory}/{audio_id}" for audio_id in df['audio_id']]
+    audio_file_paths = [f"{audio_directory}/{audio_id}" for audio_id in df['Audio_id']]
     
     
     gaussian_augment = GaussianAugmentation()
@@ -101,14 +101,14 @@ if __name__ == '__main__':
         # Perform augmentations
         if label != 3:
                 current_audio_1 = gaussian_augment(
-                    current_audio, sample_rate=16000)
+                    current_audio, sample_rate=8000)
                 augment_type_1 = "gaussian"
 
                 current_audio_2 = temporal_pitch_augment(
-                    current_audio, sample_rate=16000)
+                    current_audio, sample_rate=8000)
                 augment_type_2 = "temporal"
                 
-                current_audio_3 = audio_augment(current_audio)
+                current_audio_3 = audio_augment(current_audio, 8000)
                 augment_type_3 = "shiftnormalize"
                 
                 temp_path_1 = f"{audio_name}_{augment_type_1}.wav"
@@ -116,9 +116,9 @@ if __name__ == '__main__':
                 temp_path_3 = f"{audio_name}_{augment_type_3}.wav"
                 
                 # dir = "/home/lhy-scnu/mmml/verify/verify_augmented"
-                torchaudio.save(f"{temp_path_1}", torch.tensor(current_audio_1), 16000)
-                torchaudio.save(f"{temp_path_2}", torch.tensor(current_audio_2), 16000)
-                torchaudio.save(f"{temp_path_3}", torch.tensor(current_audio_3), 16000)
+                torchaudio.save(f"{temp_path_1}", torch.tensor(current_audio_1), 8000)
+                torchaudio.save(f"{temp_path_2}", torch.tensor(current_audio_2), 8000)
+                torchaudio.save(f"{temp_path_3}", torch.tensor(current_audio_3), 8000)
 
                 # Store the augmented data
                 for i in range(1,4):
@@ -130,10 +130,10 @@ if __name__ == '__main__':
                     augmented_audio_file_paths.append(temp_path)
                     
         else:
-            current_audio = gaussian_augment(current_audio,16000)
+            current_audio = gaussian_augment(current_audio,8000)
             temp_path = f"{audio_name}_gaussian.wav"
             augment_type = "gaussian"
-            torchaudio.save(temp_path, torch.tensor(current_audio), 16000)
+            torchaudio.save(temp_path, torch.tensor(current_audio), 8000)
             
             augmented_texts.append(text)
             augmented_phones.append(phone)
@@ -155,4 +155,4 @@ if __name__ == '__main__':
         'text': augmented_texts,
         'label': augmented_targets
     })
-    augmented_df.to_csv("/home/lhy-scnu/mmml/train/train_augment.csv", index=False)
+    augmented_df.to_csv("/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/train_augment.csv", index=False)

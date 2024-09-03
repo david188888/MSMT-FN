@@ -32,9 +32,12 @@ class MetricsTop():
         y_pred = y_pred.cpu().detach().numpy()
         y_true = y_true.cpu().detach().numpy()
         
+        y_pred = np.argmax(y_pred, axis=1)
+        y_true = y_true.flatten()
+        
         # 计算七分类准确率
         Mult_acc_7 = self.__multiclass_acc(y_pred, y_true)
-        emotion_labels = {0: 'happy', 1: 'sad', 2: 'angry', 3: 'neutral', 4: 'surprise', 5: 'fear', 6: 'disgust'}
+        emotion_labels = {0: 'anger', 1: 'disgust', 2: 'fear', 3: 'joy', 4: 'neutral', 5: 'sadness', 6: 'surprise'}
         # 计算每个类别的准确率
         class_acc = {}
         for i in range(7):
@@ -42,7 +45,7 @@ class MetricsTop():
             class_acc[emotion_labels[i]] = round(self.__multiclass_acc(y_pred[idx], y_true[idx]), 4)
             
         # 计算加权F1分数
-        f_score = f1_score(y_pred=np.argmax(y_pred, axis=1), y_true=y_true, average='weighted')
+        f_score = f1_score(y_pred=y_pred, y_true=y_true, average='weighted')
         
         eval_results = {
             "Mult_acc_7": round(Mult_acc_7, 4),
@@ -61,39 +64,39 @@ class MetricsTop():
         
         
         # 计算mosei三分类准确率
-        Mult_acc_3 = accuracy_score(y_pred=test_preds_label, y_true=test_truth_label)
+        Mult_acc_2 = accuracy_score(y_pred=test_preds_label, y_true=test_truth_label)
         # 计算 mosei 三分类F1 分数
         f_score = f1_score(y_pred=test_preds_label,y_true=test_truth_label, average='weighted')
         
-        #计算mosei 二分类准确率, 中性或者不是中性
-        y_pred_binary = np.array([[v[0], v[2]] for v in test_preds])
-        y_pred_2 = np.argmax(y_pred_binary, axis=1)
-        y_true_2 = []
-        for v in test_truth:
-            if v <= 1:
-                y_true_2.append(0)
-            else:
-                y_true_2.append(1)
-        y_true_2 = np.array(y_true_2)
-        Has0_acc_2 = accuracy_score(y_true_2, y_pred_2)
-        Has0_F1_score = f1_score(y_true_2, y_pred_2, average='weighted')
+        # #计算mosei 二分类准确率, 中性或者不是中性
+        # y_pred_binary = np.array([[v[0], v[2]] for v in test_preds])
+        # y_pred_2 = np.argmax(y_pred_binary, axis=1)
+        # y_true_2 = []
+        # for v in test_truth:
+        #     if v <= 1:
+        #         y_true_2.append(0)
+        #     else:
+        #         y_true_2.append(1)
+        # y_true_2 = np.array(y_true_2)
+        # Has0_acc_2 = accuracy_score(y_true_2, y_pred_2)
+        # Has0_F1_score = f1_score(y_true_2, y_pred_2, average='weighted')
         
-        # mosi 的正或者负
-        non_zeros = np.array([i for i, e in enumerate(test_truth) if e != 1])
+        # # mosi 的正或者负
+        # non_zeros = np.array([i for i, e in enumerate(test_truth) if e != 1])
 
-        y_pred_2 = test_preds[non_zeros]
-        y_pred_2 = np.argmax(y_pred_2, axis=1)
-        y_true_2 = test_truth[non_zeros]
-        Non0_acc_2 = accuracy_score(y_pred_2, y_true_2)
-        Non0_F1_score = f1_score(y_true_2, y_pred_2, average='weighted')
+        # y_pred_2 = test_preds[non_zeros]
+        # y_pred_2 = np.argmax(y_pred_2, axis=1)
+        # y_true_2 = test_truth[non_zeros]
+        # Non0_acc_2 = accuracy_score(y_pred_2, y_true_2)
+        # Non0_F1_score = f1_score(y_true_2, y_pred_2, average='weighted')
         
         eval_results = {
-            "Has0_acc_2":  round(Has0_acc_2, 4),
-            "Has0_F1_score": round(Has0_F1_score, 4),
-            "Non0_acc_2":  round(Non0_acc_2, 4),
-            "Non0_F1_score": round(Non0_F1_score, 4),
-            "Acc_3": round(Mult_acc_3, 4),
-            "F1_score_3": round(f_score, 4)
+            # "Has0_acc_2":  round(Has0_acc_2, 4),
+            # "Has0_F1_score": round(Has0_F1_score, 4),
+            # "Non0_acc_2":  round(Non0_acc_2, 4),
+            # "Non0_F1_score": round(Non0_F1_score, 4),
+            "Mult_acc_2": round(Mult_acc_2, 4),
+            "F1_score": round(f_score, 4)
         }
         return eval_results
     
@@ -197,17 +200,17 @@ class MetricsTop():
         test_preds_label = np.argmax(test_preds, axis=1)
         test_truth_label = test_truth.flatten()
         
-        print(f"test_preds: {test_preds[:5]}")
+        # print(f"test_preds: {test_preds[:5]}")
     
         
         # eval_results = {
         #     "Acc": round(accuracy_score(y_pred=test_preds_label, y_true=test_truth_label), 4),
         #     "F1": round(f1_score(y_pred=test_preds_label, y_true=test_truth_label, average='weighted'), 4)
         # }   
-        # eval_results = self.__mosi_classification(y_pred, y_true)
+        eval_results = self.__mosi_classification(y_pred, y_true)
         # eval_results = self.__eval_mosei_regression(y_pred, y_true)
         # eval_results = self.__eval_sims_regression(y_pred, y_true)
-        eval_results = self.__meld_classification(y_pred, y_true)
+        # eval_results = self.__meld_classification(y_pred, y_true)
         return eval_results
     
     

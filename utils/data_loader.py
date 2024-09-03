@@ -55,7 +55,7 @@ class QA_Dataset(torch.utils.data.Dataset):
         phone = self.unique_phones[index]
         # print(f"the phone is {phone}")
         indeces = self.phone_groups.indices[phone]
-        threshold = 6
+        threshold = 3
         batches = []
         
         tokenized_text = [self.tokenizer(
@@ -159,6 +159,174 @@ class QA_Dataset(torch.utils.data.Dataset):
                 "targets": target
             }
             batches.extend([first_batch, second_batch, third_batch])
+            
+        elif (len(indeces)>3*threshold and len(indeces)<=4*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:,:],
+                "text_masks": text_masks[3*threshold:,:],
+                "audio_inputs": audio_features[3*threshold:,:],
+                "audio_masks": audio_masks[3*threshold:,:],
+                "targets": target
+            }
+            batches.extend([first_batch, second_batch, third_batch, forth_batch])
+            
+        elif (len(indeces)>4*threshold and len(indeces)<=5*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                "text_masks": text_masks[3*threshold:4*threshold,:],
+                "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                "targets": target
+            }
+            fivth_batch = {
+                "text_tokens": text_tokens[4*threshold:,:],
+                "text_masks": text_masks[4*threshold:,:],
+                "audio_inputs": audio_features[4*threshold:,:],
+                "audio_masks": audio_masks[4*threshold:,:],
+                "targets": target
+            }
+            batches.extend([first_batch, second_batch, third_batch, forth_batch, fivth_batch])
+            
+        elif (len(indeces)>5*threshold and len(indeces)<=6*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                "text_masks": text_masks[3*threshold:4*threshold,:],
+                "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                "targets": target
+            }
+            fivth_batch = {
+                "text_tokens": text_tokens[4*threshold:5*threshold,:],
+                "text_masks": text_masks[4*threshold:5*threshold,:],
+                "audio_inputs": audio_features[4*threshold:5*threshold,:],
+                "audio_masks": audio_masks[4*threshold:5*threshold,:],
+                "targets": target
+            }
+            sixth_batch = {
+                "text_tokens": text_tokens[5*threshold:,:],
+                "text_masks": text_masks[5*threshold:,:],
+                "audio_inputs": audio_features[5*threshold:,:],
+                "audio_masks": audio_masks[5*threshold:,:],
+                "targets": target
+            }
+            batches.extend([first_batch, second_batch, third_batch, forth_batch, fivth_batch, sixth_batch])
+            
+        elif(6*threshold<len(indeces)<=7*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                "text_masks": text_masks[3*threshold:4*threshold,:],
+                "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                "targets": target
+            }
+            
+            fivth_batch = {
+                "text_tokens": text_tokens[4*threshold:5*threshold,:],
+                "text_masks": text_masks[4*threshold:5*threshold,:],
+                "audio_inputs": audio_features[4*threshold:5*threshold,:],
+                "audio_masks": audio_masks[4*threshold:5*threshold,:],
+                "targets": target
+            }
+            sixth_batch = {
+                "text_tokens": text_tokens[5*threshold:6*threshold,:],
+                "text_masks": text_masks[5*threshold:6*threshold,:],
+                "audio_inputs": audio_features[5*threshold:6*threshold,:],
+                "audio_masks": audio_masks[5*threshold:6*threshold,:],
+                "targets": target
+            }
+            
+            seventh_batch = {
+                "text_tokens": text_tokens[6*threshold:,:],
+                "text_masks": text_masks[6*threshold:,:],
+                "audio_inputs": audio_features[6*threshold:,:],
+                "audio_masks": audio_masks[6*threshold:,:],
+                "targets": target
+            }
+            batches.extend([first_batch, second_batch,third_batch,forth_batch,fivth_batch,sixth_batch,seventh_batch])
         return batches
 
     def __len__(self):
@@ -174,6 +342,7 @@ class MELDDataset(torch.utils.data.Dataset):
         self.audio_dir = Path(audio_dir)
         encoder = LabelEncoder()
         self.target = encoder.fit_transform(list(df['Emotion']))
+        print("encoder.classes_: ", encoder.classes_)
         self.text = df['Utterance']
         self.tokenizer = AutoTokenizer.from_pretrained("roberta-large")
         self.dialog_group = df.groupby('Dialogue_ID')
@@ -303,7 +472,8 @@ class Dataset_sims(torch.utils.data.Dataset):
     def __getitem__(self, index):
         video_id = self.unique_video_ids[index]
         indeces = self.video_id.indices[video_id]
-        threshold = 32
+        # threshold = 25
+        threshold = 10
         batches = []
         target = torch.tensor([self.targets[i] for i in indeces],dtype=torch.float)
        # extract text features        
@@ -499,7 +669,7 @@ class Dataset_sims(torch.utils.data.Dataset):
             }
             batches.extend([first_batch, second_batch, third_batch, forth_batch, fivth_batch, sixth_batch])
             
-        else:
+        elif(6*threshold<len(indeces)<=7*threshold):
             first_batch = {
                 "text_tokens": text_tokens[:threshold,:],
                 "text_masks": text_masks[:threshold,:],
@@ -552,6 +722,374 @@ class Dataset_sims(torch.utils.data.Dataset):
                 "targets": target[5*threshold:]
             }
             batches.extend([first_batch, second_batch,third_batch,forth_batch,fivth_batch,sixth_batch,seventh_batch])
+            
+        elif(7*threshold<len(indeces)<=8*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target[threshold:2*threshold]
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target[2*threshold:3*threshold]
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                "text_masks": text_masks[3*threshold:4*threshold,:],
+                "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                "targets": target[3*threshold:4*threshold]
+            }
+            
+            fivth_batch = {
+                "text_tokens": text_tokens[4*threshold:5*threshold,:],
+                "text_masks": text_masks[4*threshold:5*threshold,:],
+                "audio_inputs": audio_features[4*threshold:5*threshold,:],
+                "audio_masks": audio_masks[4*threshold:5*threshold,:],
+                "targets": target[4*threshold:5*threshold]
+            }
+            sixth_batch = {
+                "text_tokens": text_tokens[5*threshold:6*threshold,:],
+                "text_masks": text_masks[5*threshold:6*threshold,:],
+                "audio_inputs": audio_features[5*threshold:6*threshold,:],
+                "audio_masks": audio_masks[5*threshold:6*threshold,:],
+                "targets": target[5*threshold:6*threshold]
+            }
+            seventh_batch = {
+                "text_tokens": text_tokens[6*threshold:7*threshold,:],
+                "text_masks": text_masks[6*threshold:7*threshold,:],
+                "audio_inputs": audio_features[6*threshold:7*threshold,:],
+                "audio_masks": audio_masks[6*threshold:7*threshold,:],
+                "targets": target[6*threshold:7*threshold]
+            }
+            eighth_batch = {
+                "text_tokens": text_tokens[7*threshold:,:],
+                "text_masks": text_masks[7*threshold:,:],
+                "audio_inputs": audio_features[7*threshold:,:],
+                "audio_masks": audio_masks[7*threshold:,:],
+                "targets": target[7*threshold:]
+            }
+            batches.extend([first_batch, second_batch,third_batch,forth_batch,fivth_batch,sixth_batch,seventh_batch,eighth_batch])
+            
+        elif(8*threshold<len(indeces)<=9*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target[threshold:2*threshold]
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target[2*threshold:3*threshold]
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                "text_masks": text_masks[3*threshold:4*threshold,:],
+                "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                "targets": target[3*threshold:4*threshold]
+            }
+            
+            fivth_batch = {
+                "text_tokens": text_tokens[4*threshold:5*threshold,:],
+                "text_masks": text_masks[4*threshold:5*threshold,:],
+                "audio_inputs": audio_features[4*threshold:5*threshold,:],
+                "audio_masks": audio_masks[4*threshold:5*threshold,:],
+                "targets": target[4*threshold:5*threshold]
+            }
+            sixth_batch = {
+                "text_tokens": text_tokens[5*threshold:6*threshold,:],
+                "text_masks": text_masks[5*threshold:6*threshold,:],
+                "audio_inputs": audio_features[5*threshold:6*threshold,:],
+                "audio_masks": audio_masks[5*threshold:6*threshold,:],
+                "targets": target[5*threshold:6*threshold]
+            }
+            seventh_batch = {
+                "text_tokens": text_tokens[6*threshold:7*threshold,:],
+                "text_masks": text_masks[6*threshold:7*threshold,:],
+                "audio_inputs": audio_features[6*threshold:7*threshold,:],
+                "audio_masks": audio_masks[6*threshold:7*threshold,:],
+                "targets": target[6*threshold:7*threshold]
+            }
+            eighth_batch = {
+                "text_tokens": text_tokens[7*threshold:8*threshold,:],
+                "text_masks": text_masks[7*threshold:8*threshold,:],
+                "audio_inputs": audio_features[7*threshold:8*threshold,:],
+                "audio_masks": audio_masks[7*threshold:8*threshold,:],
+                "targets": target[7*threshold:8*threshold]
+            }
+            ninth_batch = {
+                "text_tokens": text_tokens[8*threshold:,:],
+                "text_masks": text_masks[8*threshold:,:],
+                "audio_inputs": audio_features[8*threshold:,:],
+                "audio_masks": audio_masks[8*threshold:,:],
+                "targets": target[8*threshold:]
+            }
+            batches.extend([first_batch, second_batch,third_batch,forth_batch,fivth_batch,sixth_batch,seventh_batch,eighth_batch,ninth_batch])
+            
+        elif(9*threshold<len(indeces)<=10*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target[threshold:2*threshold]
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target[2*threshold:3*threshold]
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                "text_masks": text_masks[3*threshold:4*threshold,:],
+                "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                "targets": target[3*threshold:4*threshold]
+            }
+            
+            fivth_batch = {
+                "text_tokens": text_tokens[4*threshold:5*threshold,:],
+                "text_masks": text_masks[4*threshold:5*threshold,:],
+                "audio_inputs": audio_features[4*threshold:5*threshold,:],
+                "audio_masks": audio_masks[4*threshold:5*threshold,:],
+                "targets": target[4*threshold:5*threshold]
+            }
+            sixth_batch = {
+                "text_tokens": text_tokens[5*threshold:6*threshold,:],
+                "text_masks": text_masks[5*threshold:6*threshold,:],
+                "audio_inputs": audio_features[5*threshold:6*threshold,:],
+                "audio_masks": audio_masks[5*threshold:6*threshold,:],
+                "targets": target[5*threshold:6*threshold]
+            }
+            seventh_batch = {
+                "text_tokens": text_tokens[6*threshold:7*threshold,:],
+                "text_masks": text_masks[6*threshold:7*threshold,:],
+                "audio_inputs": audio_features[6*threshold:7*threshold,:],
+                "audio_masks": audio_masks[6*threshold:7*threshold,:],
+                "targets": target[6*threshold:7*threshold]
+            }
+            eighth_batch = {
+                "text_tokens": text_tokens[7*threshold:8*threshold,:],
+                "text_masks": text_masks[7*threshold:8*threshold,:],
+                "audio_inputs": audio_features[7*threshold:8*threshold,:],
+                "audio_masks": audio_masks[7*threshold:8*threshold,:],
+                "targets": target[7*threshold:8*threshold]
+            }
+            ninth_batch = {
+                "text_tokens": text_tokens[8*threshold:9*threshold,:],
+                "text_masks": text_masks[8*threshold:9*threshold,:],
+                "audio_inputs": audio_features[8*threshold:9*threshold,:],
+                "audio_masks": audio_masks[8*threshold:9*threshold,:],
+                "targets": target[8*threshold:9*threshold]
+            }
+            tenth_batch = {
+                "text_tokens": text_tokens[9*threshold:,:],
+                "text_masks": text_masks[9*threshold:,:],
+                "audio_inputs": audio_features[9*threshold:,:],
+                "audio_masks": audio_masks[9*threshold:,:],
+                "targets": target[9*threshold:]
+            }
+            batches.extend([first_batch, second_batch,third_batch,forth_batch,fivth_batch,sixth_batch,seventh_batch,eighth_batch,ninth_batch,tenth_batch])
+            
+        elif(10*threshold<len(indeces)<=11*threshold):
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target[threshold:2*threshold]
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target[2*threshold:3*threshold]
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                "text_masks": text_masks[3*threshold:4*threshold,:],
+                "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                "targets": target[3*threshold:4*threshold]
+            }
+            fivth_batch = {
+                "text_tokens": text_tokens[4*threshold:5*threshold,:],
+                "text_masks": text_masks[4*threshold:5*threshold,:],
+                "audio_inputs": audio_features[4*threshold:5*threshold,:],
+                "audio_masks": audio_masks[4*threshold:5*threshold,:],
+                "targets": target[4*threshold:5*threshold]
+            }
+            sixth_batch = {
+                "text_tokens": text_tokens[5*threshold:6*threshold,:],
+                "text_masks": text_masks[5*threshold:6*threshold,:],
+                "audio_inputs": audio_features[5*threshold:6*threshold,:],
+                "audio_masks": audio_masks[5*threshold:6*threshold,:],
+                "targets": target[5*threshold:6*threshold]
+            }
+            seventh_batch = {
+                "text_tokens": text_tokens[6*threshold:7*threshold,:],
+                "text_masks": text_masks[6*threshold:7*threshold,:],
+                "audio_inputs": audio_features[6*threshold:7*threshold,:],
+                "audio_masks": audio_masks[6*threshold:7*threshold,:],
+                "targets": target[6*threshold:7*threshold]
+            }
+            eighth_batch = {
+                "text_tokens": text_tokens[7*threshold:8*threshold,:],
+                "text_masks": text_masks[7*threshold:8*threshold,:],
+                "audio_inputs": audio_features[7*threshold:8*threshold,:],
+                "audio_masks": audio_masks[7*threshold:8*threshold,:],
+                "targets": target[7*threshold:8*threshold]
+            }
+            ninth_batch = {
+                "text_tokens": text_tokens[8*threshold:9*threshold,:],
+                "text_masks": text_masks[8*threshold:9*threshold,:],
+                "audio_inputs": audio_features[8*threshold:9*threshold,:],
+                "audio_masks": audio_masks[8*threshold:9*threshold,:],
+                "targets": target[8*threshold:9*threshold]
+            }
+            tenth_batch = {
+                "text_tokens": text_tokens[9*threshold:10*threshold,:],
+                "text_masks": text_masks[9*threshold:10*threshold,:],
+                "audio_inputs": audio_features[9*threshold:10*threshold,:],
+                "audio_masks": audio_masks[9*threshold:10*threshold,:],
+                "targets": target[9*threshold:10*threshold]
+            }
+            eleventh_batch = {
+                "text_tokens": text_tokens[10*threshold:,:],
+                "text_masks": text_masks[10*threshold:,:],
+                "audio_inputs": audio_features[10*threshold:,:],
+                "audio_masks": audio_masks[10*threshold:,:],
+                "targets": target[10*threshold:]
+            }
+            batches.extend([first_batch, second_batch,third_batch,forth_batch,fivth_batch,sixth_batch,seventh_batch,eighth_batch,ninth_batch,tenth_batch,eleventh_batch])
+        else:
+            first_batch = {
+                "text_tokens": text_tokens[:threshold,:],
+                "text_masks": text_masks[:threshold,:],
+                "audio_inputs": audio_features[:threshold,:],
+                "audio_masks": audio_masks[:threshold,:],
+                "targets": target[:threshold]
+            }
+            second_batch = {
+                "text_tokens": text_tokens[threshold:2*threshold,:],
+                "text_masks": text_masks[threshold:2*threshold,:],
+                "audio_inputs": audio_features[threshold:2*threshold,:],
+                "audio_masks": audio_masks[threshold:2*threshold,:],
+                "targets": target[threshold:2*threshold]
+            }
+            third_batch = {
+                "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                "text_masks": text_masks[2*threshold:3*threshold,:],
+                "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                "targets": target[2*threshold:3*threshold]
+            }
+            forth_batch = {
+                "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                "text_masks": text_masks[3*threshold:4*threshold,:],
+                "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                "targets": target[3*threshold:4*threshold]
+            }
+            fivth_batch = {
+                "text_tokens": text_tokens[4*threshold:5*threshold,:],
+                "text_masks": text_masks[4*threshold:5*threshold,:],
+                "audio_inputs": audio_features[4*threshold:5*threshold,:],
+                "audio_masks": audio_masks[4*threshold:5*threshold,:],
+                "targets": target[4*threshold:5*threshold]
+            }
+            sixth_batch = {
+                "text_tokens": text_tokens[5*threshold:6*threshold,:],
+                "text_masks": text_masks[5*threshold:6*threshold,:],
+                "audio_inputs": audio_features[5*threshold:6*threshold,:],
+                "audio_masks": audio_masks[5*threshold:6*threshold,:],
+                "targets": target[5*threshold:6*threshold]
+            }
+            seventh_batch = {
+                "text_tokens": text_tokens[6*threshold:7*threshold,:],
+                "text_masks": text_masks[6*threshold:7*threshold,:],
+                "audio_inputs": audio_features[6*threshold:7*threshold,:],
+                "audio_masks": audio_masks[6*threshold:7*threshold,:],
+                "targets": target[6*threshold:7*threshold]
+            }
+            eighth_batch = {
+                "text_tokens": text_tokens[7*threshold:8*threshold,:],
+                "text_masks": text_masks[7*threshold:8*threshold,:],
+                "audio_inputs": audio_features[7*threshold:8*threshold,:],
+                "audio_masks": audio_masks[7*threshold:8*threshold,:],
+                "targets": target[7*threshold:8*threshold]
+            }
+            ninth_batch = {
+                "text_tokens": text_tokens[8*threshold:9*threshold,:],
+                "text_masks": text_masks[8*threshold:9*threshold,:],
+                "audio_inputs": audio_features[8*threshold:9*threshold,:],
+                "audio_masks": audio_masks[8*threshold:9*threshold,:],
+                "targets": target[8*threshold:9*threshold]
+            }
+            tenth_batch = {
+                "text_tokens": text_tokens[9*threshold:10*threshold,:],
+                "text_masks": text_masks[9*threshold:10*threshold,:],
+                "audio_inputs": audio_features[9*threshold:10*threshold,:],
+                "audio_masks": audio_masks[9*threshold:10*threshold,:],
+                "targets": target[9*threshold:10*threshold]
+            }
+            eleventh_batch = {
+                "text_tokens": text_tokens[10*threshold:11*threshold,:],
+                "text_masks": text_masks[10*threshold:11*threshold,:],
+                "audio_inputs": audio_features[10*threshold:11*threshold,:],
+                "audio_masks": audio_masks[10*threshold:11*threshold,:],
+                "targets": target[10*threshold:11*threshold]
+            }
+            twelveth_batch = {
+                "text_tokens": text_tokens[11*threshold:,:],
+                "text_masks": text_masks[11*threshold:,:],
+                "audio_inputs": audio_features[11*threshold:,:],
+                "audio_masks": audio_masks[11*threshold:,:],
+                "targets": target[11*threshold:]
+            }
+            batches.extend([first_batch, second_batch,third_batch,forth_batch,fivth_batch,sixth_batch,seventh_batch,eighth_batch,ninth_batch,tenth_batch,eleventh_batch,twelveth_batch])
+            
         return batches
     
     def __len__(self):
@@ -580,11 +1118,11 @@ class Dataset_mosi(torch.utils.data.Dataset):
         # store labels
         encoder = LabelEncoder()
         # df['annotation'] = df['annotation'].apply(lambda x: 'Negative' if x in ['Negative', 'Neutral'] else 'positive')
-        # df = df[df['annotation'] != 'Neutral']
-        # df = df.reset_index(drop=True)
-        # self.targets = encoder.fit_transform(list(df['annotation']))
-        # print("encoder classes: ", encoder.classes_)
-        self.targets = df['label']
+        df = df[df['annotation'] != 'Neutral']
+        df = df.reset_index(drop=True)
+        self.targets = encoder.fit_transform(list(df['annotation']))
+        print("encoder classes: ", encoder.classes_)
+        # self.targets = df['label']
         
         # store texts
         df['text'] = df['text'].str[0]+df['text'].str[1::].apply(lambda x: x.lower())
@@ -606,7 +1144,8 @@ class Dataset_mosi(torch.utils.data.Dataset):
     def __getitem__(self, index):
         video_id = self.unique_video_ids[index]
         indeces = self.video_id.indices[video_id]       
-        threshold = 20
+        # threshold = 20
+        threshold = 10
         batches = []
         # tokenize text
         tokenized_text = [self.tokenizer(
@@ -632,7 +1171,8 @@ class Dataset_mosi(torch.utils.data.Dataset):
             audio_masks.append(torch.tensor(np.array(features['attention_mask']), dtype=torch.long).squeeze())
         audio_features = torch.stack(audio_features)
         audio_masks = torch.stack(audio_masks)
-        target = torch.tensor([self.targets[i] for i in indeces],dtype=torch.float)
+        target = torch.tensor([self.targets[i] for i in indeces],dtype=torch.long)
+        
 
 
         if len(indeces) <= threshold:
@@ -705,7 +1245,7 @@ class Dataset_mosi(torch.utils.data.Dataset):
                 
                 batches.extend([first_batch, second_batch, third_batch, forth_batch])
             
-            elif (len(indeces)>4*threshold):
+            elif (4*threshold<len(indeces)<5*threshold):
                 first_batch = {
                     "text_tokens": text_tokens[:threshold,:],
                     "text_masks": text_masks[:threshold,:],
@@ -743,7 +1283,165 @@ class Dataset_mosi(torch.utils.data.Dataset):
                 }
                 batches.extend([first_batch, second_batch, third_batch, forth_batch,five_batch])
                 
-            else:
+            elif (5*threshold<len(indeces)<6*threshold):
+                first_batch = {
+                    "text_tokens": text_tokens[:threshold,:],
+                    "text_masks": text_masks[:threshold,:],
+                    "audio_inputs": audio_features[:threshold,:],
+                    "audio_masks": audio_masks[:threshold,:],
+                    "targets": target[:threshold]
+                }
+                second_batch = {
+                    "text_tokens": text_tokens[threshold:2*threshold,:],
+                    "text_masks": text_masks[threshold:2*threshold,:],
+                    "audio_inputs": audio_features[threshold:2*threshold,:],
+                    "audio_masks": audio_masks[threshold:2*threshold,:],
+                    "targets": target[threshold:2*threshold]
+                }
+                third_batch = {
+                    "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                    "text_masks": text_masks[2*threshold:3*threshold,:],
+                    "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                    "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                    "targets": target[2*threshold:3*threshold]
+                }
+                forth_batch = {
+                    "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                    "text_masks": text_masks[3*threshold:4*threshold,:],
+                    "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                    "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                    "targets": target[3*threshold:4*threshold]
+                }
+                five_batch = {
+                    "text_tokens": text_tokens[4*threshold:5*threshold,:],
+                    "text_masks": text_masks[4*threshold:5*threshold,:],
+                    "audio_inputs": audio_features[4*threshold:5*threshold,:],
+                    "audio_masks": audio_masks[4*threshold:5*threshold,:],
+                    "targets": target[4*threshold:5*threshold]
+                }
+                six_batch = {
+                    "text_tokens": text_tokens[5*threshold:,:],
+                    "text_masks": text_masks[5*threshold:,:],
+                    "audio_inputs": audio_features[5*threshold:,:],
+                    "audio_masks": audio_masks[5*threshold:,:],
+                    "targets": target[5*threshold:]
+                }
+                batches.extend([first_batch, second_batch, third_batch, forth_batch,five_batch,six_batch])
+                
+            elif (6*threshold<len(indeces)<7*threshold):
+                first_batch = {
+                    "text_tokens": text_tokens[:threshold,:],
+                    "text_masks": text_masks[:threshold,:],
+                    "audio_inputs": audio_features[:threshold,:],
+                    "audio_masks": audio_masks[:threshold,:],
+                    "targets": target[:threshold]
+                }
+                second_batch = {
+                    "text_tokens": text_tokens[threshold:2*threshold,:],
+                    "text_masks": text_masks[threshold:2*threshold,:],
+                    "audio_inputs": audio_features[threshold:2*threshold,:],
+                    "audio_masks": audio_masks[threshold:2*threshold,:],
+                    "targets": target[threshold:2*threshold]
+                }
+                third_batch = {
+                    "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                    "text_masks": text_masks[2*threshold:3*threshold,:],
+                    "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                    "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                    "targets": target[2*threshold:3*threshold]
+                }
+                forth_batch = {
+                    "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                    "text_masks": text_masks[3*threshold:4*threshold,:],
+                    "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                    "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                    "targets": target[3*threshold:4*threshold]
+                }
+                five_batch = {
+                    "text_tokens": text_tokens[4*threshold:5*threshold,:],
+                    "text_masks": text_masks[4*threshold:5*threshold,:],
+                    "audio_inputs": audio_features[4*threshold:5*threshold,:],
+                    "audio_masks": audio_masks[4*threshold:5*threshold,:],
+                    "targets": target[4*threshold:5*threshold]
+                }
+                six_batch = {
+                    "text_tokens": text_tokens[5*threshold:6*threshold,:],
+                    "text_masks": text_masks[5*threshold:6*threshold,:],
+                    "audio_inputs": audio_features[5*threshold:6*threshold,:],
+                    "audio_masks": audio_masks[5*threshold:6*threshold,:],
+                    "targets": target[5*threshold:6*threshold]
+                }
+                seven_batch = { 
+                    "text_tokens": text_tokens[6*threshold:,:],
+                    "text_masks": text_masks[6*threshold:,:],
+                    "audio_inputs": audio_features[6*threshold:,:],
+                    "audio_masks": audio_masks[6*threshold:,:],
+                    "targets": target[6*threshold:]
+                }
+                
+                batches.extend([first_batch, second_batch, third_batch, forth_batch,five_batch,six_batch,seven_batch])
+                
+            elif (7*threshold<len(indeces)<8*threshold):
+                first_batch = {
+                    "text_tokens": text_tokens[:threshold,:],
+                    "text_masks": text_masks[:threshold,:],
+                    "audio_inputs": audio_features[:threshold,:],
+                    "audio_masks": audio_masks[:threshold,:],
+                    "targets": target[:threshold]
+                }
+                second_batch = {
+                    "text_tokens": text_tokens[threshold:2*threshold,:],
+                    "text_masks": text_masks[threshold:2*threshold,:],
+                    "audio_inputs": audio_features[threshold:2*threshold,:],
+                    "audio_masks": audio_masks[threshold:2*threshold,:],
+                    "targets": target[threshold:2*threshold]
+                }
+                third_batch = {
+                    "text_tokens": text_tokens[2*threshold:3*threshold,:],
+                    "text_masks": text_masks[2*threshold:3*threshold,:],
+                    "audio_inputs": audio_features[2*threshold:3*threshold,:],
+                    "audio_masks": audio_masks[2*threshold:3*threshold,:],
+                    "targets": target[2*threshold:3*threshold]
+                }
+                forth_batch = {
+                    "text_tokens": text_tokens[3*threshold:4*threshold,:],
+                    "text_masks": text_masks[3*threshold:4*threshold,:],
+                    "audio_inputs": audio_features[3*threshold:4*threshold,:],
+                    "audio_masks": audio_masks[3*threshold:4*threshold,:],
+                    "targets": target[3*threshold:4*threshold]
+                }
+                five_batch = {
+                    "text_tokens": text_tokens[4*threshold:5*threshold,:],
+                    "text_masks": text_masks[4*threshold:5*threshold,:],
+                    "audio_inputs": audio_features[4*threshold:5*threshold,:],
+                    "audio_masks": audio_masks[4*threshold:5*threshold,:],
+                    "targets": target[4*threshold:5*threshold]
+                }
+                six_batch = {
+                    "text_tokens": text_tokens[5*threshold:6*threshold,:],
+                    "text_masks": text_masks[5*threshold:6*threshold,:],
+                    "audio_inputs": audio_features[5*threshold:6*threshold,:],
+                    "audio_masks": audio_masks[5*threshold:6*threshold,:],
+                    "targets": target[5*threshold:6*threshold]
+                }
+                seven_batch = {
+                    "text_tokens": text_tokens[6*threshold:7*threshold,:],
+                    "text_masks": text_masks[6*threshold:7*threshold,:],
+                    "audio_inputs": audio_features[6*threshold:7*threshold,:],
+                    "audio_masks": audio_masks[6*threshold:7*threshold,:],
+                    "targets": target[6*threshold:7*threshold]
+                }
+                eight_batch = {
+                    "text_tokens": text_tokens[7*threshold:,:],
+                    "text_masks": text_masks[7*threshold:,:],
+                    "audio_inputs": audio_features[7*threshold:,:],
+                    "audio_masks": audio_masks[7*threshold:,:],
+                    "targets": target[7*threshold:]
+                }
+                batches.extend([first_batch, second_batch, third_batch, forth_batch,five_batch,six_batch,seven_batch,eight_batch])
+                
+                
+            elif (1*threshold<len(indeces)<2*threshold):
                 first_batch = {
                     "text_tokens": text_tokens[:threshold,:],
                     "text_masks": text_masks[:threshold,:],
@@ -773,25 +1471,25 @@ def data_loader(batch_size):
     test_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/test.csv'
     verify_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/verify.csv'
     
-    label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosei/moseilabel.csv'
+    label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosi/mosi_label.csv'
     
     train_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/train_splits_wav'
     test_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/output_repeated_splits_test_wav'
     verify_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/dev_splits_complete_wav'
     
-    file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosei/wav'
+    file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosi/wav'
     
-    # qa_train_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train'
-    # qa_test_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_test'
-    # qa_verify_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_verify'
+    qa_train_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train'
+    qa_test_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_test'
+    qa_verify_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_verify'
     
-    # qa_train_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train.csv'
-    # qa_test_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_test.csv'
-    # qa_verify_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_verify.csv'
+    qa_train_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train.csv'
+    qa_test_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_test.csv'
+    qa_verify_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_verify.csv'
     
-    # train_data = QA_Dataset(qa_train_label, qa_train_file)
-    # test_data = QA_Dataset(qa_test_label, qa_test_file)
-    # val_data = QA_Dataset(qa_verify_label, qa_verify_file)
+    train_data = QA_Dataset(qa_train_label, qa_train_file)
+    test_data = QA_Dataset(qa_test_label, qa_test_file)
+    val_data = QA_Dataset(qa_verify_label, qa_verify_file)
     
     # train_data = Dataset_mosi(label_path, file_path, mode='train')
     # test_data = Dataset_mosi(label_path, file_path, mode='test')
@@ -801,9 +1499,9 @@ def data_loader(batch_size):
     # test_data = Dataset_sims(label_path, file_path, mode='test')
     # val_data = Dataset_sims(label_path, file_path, mode='valid')
     
-    train_data = MELDDataset(train_label_path, train_file_path)
-    test_data = MELDDataset(test_label_path, test_file_path)
-    val_data = MELDDataset(verify_label_path, verify_file_path)
+    # train_data = MELDDataset(train_label_path, train_file_path)
+    # test_data = MELDDataset(test_label_path, test_file_path)
+    # val_data = MELDDataset(verify_label_path, verify_file_path)
     
     
     

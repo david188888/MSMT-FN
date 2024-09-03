@@ -71,7 +71,7 @@ class GruConfig(object):
         self.bidirectional = bidirectional
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.dropout = 0.1
+        self.dropout = 0.5
         
 
 BertLayerNorm = torch.nn.LayerNorm
@@ -221,6 +221,7 @@ class BottleneckFusion(nn.Module):
     def forward(self, fusion_input ,fusion_attention_mask, lang_input, lang_attention_mask, bottleneck):
         t_mod_lang = fusion_input.size(1)
         t_mod_audio = lang_input.size(1)
+    
         
         in_mod_fusion = torch.cat([fusion_input, bottleneck], dim=1)
         in_mod_lang = torch.cat([lang_input, bottleneck], dim=1)
@@ -334,7 +335,11 @@ class BertLayer(nn.Module):
 class FCLayer(nn.Module):
     def __init__(self, config):
         super(FCLayer, self).__init__()
-        self.fc = nn.Linear(61*768, 768)
+        # self.fc = nn.Linear(349*768, 768) # 349 is the v3, v1 for sims
+        # self.fc = nn.Linear(351*768, 768) # 351 is v2
+        # self.fc = nn.Linear(397*768, 768) # 352 is v1, v3 for mosi mosei
+        # self.fc = nn.Linear(399*768, 768)
+        self.fc = nn.Linear(200*768, 768)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(config.dropout)
     
@@ -358,11 +363,11 @@ class GRU_context(nn.Module):
         self.n_directions = 2 if self.bidirectional else 1
         
         self.gru = nn.GRU(input_size = self.input_dim, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first = True, bidirectional = self.bidirectional)
-        # self.fc = nn.Sequential(
-        #     nn.Linear(self.hidden_size*self.n_directions, self.output_size),
-        #     nn.ReLU(),
-        #     nn.Dropout(self.dropout),
-        # )
+        self.fc = nn.Sequential(
+            nn.Linear(self.hidden_size*self.n_directions, self.output_size),
+            nn.ReLU(),
+            nn.Dropout(self.dropout),
+        )
 
         
     
@@ -370,12 +375,11 @@ class GRU_context(nn.Module):
         # print(self.input_dim)
         output, hidden = self.gru(inputs)
         # # print(f"the shape of hidden is :{hidden.size()}")
-        # forward_hidden = hidden[-2, :, :]
-        # backward_hidden = hidden[-1, :, :]
-        # concat_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
-        # fc_output_1 = self.fc(concat_hidden)
-        # # fc_output_1 = self.fc(output)
-        return output
+        forward_hidden = hidden[-2, :, :]
+        backward_hidden = hidden[-1, :, :]
+        concat_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
+        fc_output_1 = self.fc(concat_hidden)
+        return fc_output_1
     
     
 class Bottleneck(nn.Module):
@@ -449,18 +453,21 @@ class CMELayer(nn.Module):
             audio_input, lang_input, ctx_att_mask=lang_attention_mask)
         return lang_att_output, audio_att_output
 
-    def self_att(self, lang_input, lang_attention_mask):
+    def self_att(self, lang_input, lang_attention_mask, audio_input, audio_attention_mask):
         # Self Attention
         lang_att_output = self.lang_self_att(lang_input, lang_attention_mask)
-        return lang_att_output
+        audio_att_output = self.audio_self_att(audio_input, audio_attention_mask)
+        return lang_att_output, audio_att_output
 
-    def output_fc(self, lang_input):
+    def output_fc(self, lang_input,audio_input):
         # FC layers
         lang_inter_output = self.lang_inter(lang_input)
-
+        audio_inter_output = self.audio_inter(audio_input)
+        
         # Layer output
         lang_output = self.lang_output(lang_inter_output, lang_input)
-        return lang_output
+        audio_output = self.audio_output(audio_inter_output, audio_input)
+        return lang_output, audio_output
     
 
 
@@ -473,15 +480,15 @@ class CMELayer(nn.Module):
         lang_att_output, audio_att_output = self.cross_att(lang_att_output, lang_attention_mask,
                                                            audio_att_output, audio_attention_mask)
         
-        lang_att_output = self.self_att(lang_att_output, lang_attention_mask)
-        audio_att_output = self.self_att(audio_att_output, audio_attention_mask)
+        lang_att_output, audio_att_output = self.self_att(lang_att_output, lang_attention_mask,
+                                                          audio_att_output, audio_attention_mask)
         
-        lang_output = self.output_fc(
-            lang_att_output)
+        lang_output, audio_output = self.output_fc(
+            lang_att_output, audio_att_output)
         
         # print(f"the shape of lang_output is :{lang_output.size()}")
 
-        return lang_output
+        return lang_output, audio_output
 
 
 
