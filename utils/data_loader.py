@@ -97,16 +97,16 @@ class QA_Dataset(torch.utils.data.Dataset):
         #第三种是将五分类转换为三分类，三分类：A为一类，B/C为一类，D/E为一类
         #第四种是将五分类转换为二分类，二分类：A/B为一类，CDE为一类
         
-        # target = torch.tensor(self.targets[indeces[0]],dtype=torch.float32).unsqueeze(0)
-        five_class = self.targets[indeces[0]]
-        class_list = self.convert_label(five_class)
+        target = torch.tensor(self.targets[indeces[0]],dtype=torch.long).unsqueeze(0)
+        # five_class = self.targets[indeces[0]]
+        # class_list = self.convert_label(five_class)
         
-        target = {
-            "five_class":torch.tensor(class_list[0],dtype=torch.long),
-            "four_class":torch.tensor(class_list[1],dtype=torch.long),
-            'three_class':torch.tensor(class_list[2],dtype=torch.long),
-            "two_class": torch.tensor(class_list[3],dtype=torch.long)
-        }
+        # target = {
+        #     "five_class":torch.tensor(class_list[0],dtype=torch.long),
+        #     "four_class":torch.tensor(class_list[1],dtype=torch.long),
+        #     'three_class':torch.tensor(class_list[2],dtype=torch.long),
+        #     "two_class": torch.tensor(class_list[3],dtype=torch.long)
+        # }
         
         
         if len(indeces) <= threshold:
@@ -1118,11 +1118,11 @@ class Dataset_mosi(torch.utils.data.Dataset):
         # store labels
         encoder = LabelEncoder()
         # df['annotation'] = df['annotation'].apply(lambda x: 'Negative' if x in ['Negative', 'Neutral'] else 'positive')
-        df = df[df['annotation'] != 'Neutral']
-        df = df.reset_index(drop=True)
-        self.targets = encoder.fit_transform(list(df['annotation']))
-        print("encoder classes: ", encoder.classes_)
-        # self.targets = df['label']
+        # df = df[df['annotation'] != 'Neutral']
+        # df = df.reset_index(drop=True)
+        # self.targets = encoder.fit_transform(list(df['annotation']))
+        # print("encoder classes: ", encoder.classes_)
+        self.targets = df['label']
         
         # store texts
         df['text'] = df['text'].str[0]+df['text'].str[1::].apply(lambda x: x.lower())
@@ -1467,17 +1467,17 @@ class Dataset_mosi(torch.utils.data.Dataset):
 
 def data_loader(batch_size):
     
-    train_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/train.csv'
-    test_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/test.csv'
-    verify_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/verify.csv'
+    # train_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/train.csv'
+    # test_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/test.csv'
+    # verify_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/verify.csv'
     
-    label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosi/mosi_label.csv'
+    label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosei/moseilabel.csv'
     
-    train_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/train_splits_wav'
-    test_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/output_repeated_splits_test_wav'
-    verify_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/dev_splits_complete_wav'
+    # train_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/train_splits_wav'
+    # test_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/output_repeated_splits_test_wav'
+    # verify_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/dev_splits_complete_wav'
     
-    file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosi/wav'
+    file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosei/wav'
     
     qa_train_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train'
     qa_test_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_test'
@@ -1487,13 +1487,13 @@ def data_loader(batch_size):
     qa_test_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_test.csv'
     qa_verify_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_verify.csv'
     
-    train_data = QA_Dataset(qa_train_label, qa_train_file)
-    test_data = QA_Dataset(qa_test_label, qa_test_file)
-    val_data = QA_Dataset(qa_verify_label, qa_verify_file)
+    # train_data = QA_Dataset(qa_train_label, qa_train_file)
+    # test_data = QA_Dataset(qa_test_label, qa_test_file)
+    # val_data = QA_Dataset(qa_verify_label, qa_verify_file)
     
-    # train_data = Dataset_mosi(label_path, file_path, mode='train')
-    # test_data = Dataset_mosi(label_path, file_path, mode='test')
-    # val_data = Dataset_mosi(label_path, file_path, mode='valid')
+    train_data = Dataset_mosi(label_path, file_path, mode='train')
+    test_data = Dataset_mosi(label_path, file_path, mode='test')
+    val_data = Dataset_mosi(label_path, file_path, mode='valid')
     
     # train_data = Dataset_sims(label_path, file_path, mode='train')
     # test_data = Dataset_sims(label_path, file_path, mode='test')

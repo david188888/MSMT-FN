@@ -339,7 +339,8 @@ class FCLayer(nn.Module):
         # self.fc = nn.Linear(351*768, 768) # 351 is v2
         # self.fc = nn.Linear(397*768, 768) # 352 is v1, v3 for mosi mosei
         # self.fc = nn.Linear(399*768, 768)
-        self.fc = nn.Linear(200*768, 768)
+        # self.fc = nn.Linear(200*768, 768)
+        self.fc = nn.Linear(97*768, 768)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(config.dropout)
     
@@ -375,12 +376,12 @@ class GRU_context(nn.Module):
         # print(self.input_dim)
         output, hidden = self.gru(inputs)
         # # print(f"the shape of hidden is :{hidden.size()}")
-        forward_hidden = hidden[-2, :, :]
-        backward_hidden = hidden[-1, :, :]
-        concat_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
-        fc_output_1 = self.fc(concat_hidden)
-        return fc_output_1
-    
+        # forward_hidden = hidden[-2, :, :]
+        # backward_hidden = hidden[-1, :, :]
+        # concat_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
+        # fc_output_1 = self.fc(concat_hidden)
+        # return fc_output_1
+        return output    
     
 class Bottleneck(nn.Module):
     def __init__(self, config):
@@ -418,7 +419,18 @@ class Bottleneck(nn.Module):
         return fusion_output , fusion_bottleneck, lang_bottleneck
         
         
-         
+class TextAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.lang_self_att = BertSelfattLayer(config)
+        
+    def self_attn(self,lang_input, lang_attention_mask):
+        lang_att_output = self.lang_self_att(lang_input, lang_attention_mask)
+        return lang_att_output
+        
+    def forward(self,lang_feats, lang_attention_mask):
+        lang_output = self.self_attn(lang_feats, lang_attention_mask)
+        return lang_output
 
     
     
@@ -429,19 +441,14 @@ class CMELayer(nn.Module):
         
         
         # The cross-attention Layer
-        self.audio_attention = BertCrossattLayer(config)
         self.lang_attention = BertCrossattLayer(config)
 
         # Self-attention Layers
         self.lang_self_att = BertSelfattLayer(config)
-        self.audio_self_att = BertSelfattLayer(config)
 
         # Intermediate and Output Layers (FFNs)
         self.lang_inter = BertIntermediate(config)
         self.lang_output = BertOutput(config)
-        self.audio_inter = BertIntermediate(config)
-        self.audio_output = BertOutput(config)
-        
 
         
     
@@ -449,25 +456,20 @@ class CMELayer(nn.Module):
         # Cross Attention
         lang_att_output = self.lang_attention(
             lang_input, audio_input, ctx_att_mask=audio_attention_mask)
-        audio_att_output = self.audio_attention(
-            audio_input, lang_input, ctx_att_mask=lang_attention_mask)
-        return lang_att_output, audio_att_output
+        return lang_att_output
 
-    def self_att(self, lang_input, lang_attention_mask, audio_input, audio_attention_mask):
+    def self_att(self, lang_input, lang_attention_mask):
         # Self Attention
         lang_att_output = self.lang_self_att(lang_input, lang_attention_mask)
-        audio_att_output = self.audio_self_att(audio_input, audio_attention_mask)
-        return lang_att_output, audio_att_output
+        return lang_att_output
 
-    def output_fc(self, lang_input,audio_input):
+    def output_fc(self, lang_input):
         # FC layers
         lang_inter_output = self.lang_inter(lang_input)
-        audio_inter_output = self.audio_inter(audio_input)
         
         # Layer output
         lang_output = self.lang_output(lang_inter_output, lang_input)
-        audio_output = self.audio_output(audio_inter_output, audio_input)
-        return lang_output, audio_output
+        return lang_output
     
 
 
@@ -477,18 +479,18 @@ class CMELayer(nn.Module):
         lang_att_output = lang_feats
         audio_att_output = audio_feats
     
-        lang_att_output, audio_att_output = self.cross_att(lang_att_output, lang_attention_mask,
+        lang_att_output = self.cross_att(lang_att_output, lang_attention_mask,
                                                            audio_att_output, audio_attention_mask)
         
-        lang_att_output, audio_att_output = self.self_att(lang_att_output, lang_attention_mask,
-                                                          audio_att_output, audio_attention_mask)
+        lang_att_output = self.self_att(lang_att_output, lang_attention_mask,
+                                                          )
         
-        lang_output, audio_output = self.output_fc(
-            lang_att_output, audio_att_output)
+        lang_output = self.output_fc(
+            lang_att_output)
         
         # print(f"the shape of lang_output is :{lang_output.size()}")
 
-        return lang_output, audio_output
+        return lang_output
 
 
 

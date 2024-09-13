@@ -4,8 +4,8 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 
 # 读取多音字表格数据
-multi_tone_df = pd.read_csv('8000hans.csv')
-target_df = pd.read_csv('/home/lhy-scnu/mmml/test/dialog_test_11.csv')
+multi_tone_df = pd.read_csv('/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/8000hans.csv')
+target_df = pd.read_csv('/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train.csv')
 
 # 创建一个按拼音分组的字典
 pinyin_dict = {}
@@ -47,7 +47,7 @@ replace_prob = 0.3  # 设置替换概率
 num_threads = 4  # 设置线程数
 
 for _ in tqdm(range(num_iterations), desc="Iterations"):
-    source_df = pd.read_csv('/home/lhy-scnu/mmml/test/dialog_test_11.csv')
+    source_df = pd.read_csv('/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train.csv')
     
     # 将数据分割成多片进行处理
     chunks = [source_df['text'][i::num_threads] for i in range(num_threads)]
@@ -57,6 +57,6 @@ for _ in tqdm(range(num_iterations), desc="Iterations"):
     
     # 合并处理结果
     source_df['text'] = pd.concat(results).sort_index().values
-    pd.concat([target_df, source_df], ignore_index=True).to_csv('newTest_TextEnhan.csv', index=False)
+    pd.concat([target_df, source_df], ignore_index=True).to_csv('/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/train_text_augment.csv', index=False)
 
 print("处理完成并保存到目标文件。")

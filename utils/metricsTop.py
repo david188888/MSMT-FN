@@ -56,6 +56,86 @@ class MetricsTop():
         return eval_results
     
     
+    def qa_data_classification(self, y_pred, y_true):
+        '''
+        计算qa数据集的分类准确率
+        '''
+        
+        y_pred = y_pred.cpu().detach().numpy()
+        y_true = y_true.cpu().detach().numpy()
+        
+        y_pred = np.argmax(y_pred, axis=1)
+        y_true = y_true.flatten()
+        
+        
+        
+        # 计算五分类准确率
+        Mult_acc_5 = self.__multiclass_acc(y_pred, y_true)
+        
+        # 计算四分类准确率，0为一类，1为一类，2为一类，3，4为一类
+        y_pred_4 = y_pred.copy()
+        y_true_4 = y_true.copy()
+        
+        y_pred_4[y_pred_4 == 3] = 3
+        y_pred_4[y_pred_4 == 4] = 3
+        
+        y_true_4[y_true_4 == 3] = 3
+        y_true_4[y_true_4 == 4] = 3
+
+        
+        Mult_acc_4 = self.__multiclass_acc(y_pred_4, y_true_4)
+        
+        # 计算三分类准确率 0为一类，1，2为一类，3，4为一类
+        y_pred_3 = y_pred.copy()
+        y_true_3 = y_true.copy()
+        
+        y_pred_3[y_pred_3 == 0] = 0
+        y_pred_3[y_pred_3 == 1] = 1
+        y_pred_3[y_pred_3 == 2] = 1
+        y_pred_3[y_pred_3 == 3] = 2
+        y_pred_3[y_pred_3 == 4] = 2
+        
+        y_true_3[y_true_3 == 0] = 0
+        y_true_3[y_true_3 == 1] = 1
+        y_true_3[y_true_3 == 2] = 1
+        y_true_3[y_true_3 == 3] = 2
+        y_true_3[y_true_3 == 4] = 2
+        
+        Mult_acc_3 = self.__multiclass_acc(y_pred_3, y_true_3)
+        
+        
+        # 计算二分类准确率 0，1为一类，2，3，4为一类
+        y_pred_2 = y_pred.copy()
+        y_true_2 = y_true.copy()
+        
+        y_pred_2[y_pred_2 == 0] = 0
+        y_pred_2[y_pred_2 == 1] = 0
+        y_pred_2[y_pred_2 == 2] = 1
+        y_pred_2[y_pred_2 == 3] = 1
+        y_pred_2[y_pred_2 == 4] = 1
+        
+        y_true_2[y_true_2 == 0] = 0
+        y_true_2[y_true_2 == 1] = 0
+        y_true_2[y_true_2 == 2] = 1
+        y_true_2[y_true_2 == 3] = 1
+        y_true_2[y_true_2 == 4] = 1
+        Mult_acc_2 = self.__multiclass_acc(y_pred_2, y_true_2)
+        
+        eval_results = {
+            "Mult_acc_5": round(Mult_acc_5, 4),
+            "Mult_acc_4": round(Mult_acc_4, 4),
+            "Mult_acc_3": round(Mult_acc_3, 4),
+            "Mult_acc_2": round(Mult_acc_2, 4)
+        }
+        
+        return eval_results
+        
+        
+        
+        
+        
+    
+    
     def __mosi_classification(self, y_pred, y_true):
         test_preds = y_pred.cpu().detach().numpy()
         test_truth = y_true.cpu().detach().numpy()
@@ -129,6 +209,12 @@ class MetricsTop():
         binary_preds = (test_preds >= 0)
         acc2 = accuracy_score(binary_preds, binary_truth)
         f_score = f1_score(binary_truth, binary_preds, average='weighted')
+        
+        print(f"test_preds{test_preds[:5]}")
+        print(f"test_truth{test_truth[:5]}")
+        
+        print(f"binary pred{binary_preds[:5]}")
+        print(f"binary truth{binary_truth[:5]}")
         
         eval_results = {
             "Has0_acc_2":  round(acc2, 4),
@@ -207,8 +293,9 @@ class MetricsTop():
         #     "Acc": round(accuracy_score(y_pred=test_preds_label, y_true=test_truth_label), 4),
         #     "F1": round(f1_score(y_pred=test_preds_label, y_true=test_truth_label, average='weighted'), 4)
         # }   
-        eval_results = self.__mosi_classification(y_pred, y_true)
-        # eval_results = self.__eval_mosei_regression(y_pred, y_true)
+        # eval_results = self.qa_data_classification(y_pred, y_true)
+        # eval_results = self.__mosi_classification(y_pred, y_true)
+        eval_results = self.__eval_mosei_regression(y_pred, y_true)
         # eval_results = self.__eval_sims_regression(y_pred, y_true)
         # eval_results = self.__meld_classification(y_pred, y_true)
         return eval_results
