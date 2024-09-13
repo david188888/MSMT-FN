@@ -1,0 +1,2 @@
+TEST (highest val acc)  Mult_acc_2: 0.8454  Mult_acc_3: 0.7423  Mult_acc_5: 0.6804  F1_score: 0.8375  MAE: 0.1542  Corr: 0.6107  Loss: 0.1542 
+TEST (lowest val loss)  Mult_acc_2: 0.8557  Mult_acc_3: 0.7320  Mult_acc_5: 0.6701  F1_score: 0.8496  MAE: 0.1597  Corr: 0.5841  Loss: 0.1597 

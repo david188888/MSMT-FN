@@ -1,0 +1,13 @@
+searchSpaceFile: search_space.json
+trialCommand: HF_ENDPOINT='https://hf-mirror.com' python run.py
+trialConcurrency: 1
+logLevel: debug
+maxExperimentDuration: 40h
+maxTrialNumber: 30
+tuner:  
+  name: random
+  classArgs:
+    optimize_mode: maximize
+    seed: 100
+trainingService:  # For other platforms, check mnist-pytorch example
+  platform: local
