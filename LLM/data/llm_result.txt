@@ -1,3 +1,0 @@
-result of llama in customer is 0.5798090040927695
-result of ollama in fusion is 0.6296296296296297
-result of llama in origin is 0.20970042796005706
