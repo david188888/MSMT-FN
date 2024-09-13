@@ -1,1 +1,0 @@
-EPOCH: 1   Mult_acc_2: 0.7551  Mult_acc_3: 0.6837  Mult_acc_5: 0.6020  F1_score: 0.7577  MAE: 0.2115  Corr: 0.4158  Loss: 0.2115 
