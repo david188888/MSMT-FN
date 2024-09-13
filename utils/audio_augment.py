@@ -50,8 +50,8 @@ class AudioAugmentation:
 
 
 if __name__ == '__main__':
-    csv_path = "/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train.csv"
-    audio_directory = "/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/train_no_silence"
+    csv_path = ""
+    audio_directory = ""
     df = pd.read_csv(csv_path)
     
     encoder = LabelEncoder()
@@ -155,4 +155,3 @@ if __name__ == '__main__':
         'text': augmented_texts,
         'label': augmented_targets
     })
-    augmented_df.to_csv("/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/train_augment.csv", index=False)

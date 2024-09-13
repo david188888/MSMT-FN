@@ -174,8 +174,7 @@ class BertAttention(nn.Module):
                 attention_mask == 0, float('-inf'))
             attention_mask = attention_mask.masked_fill(
                 attention_mask == 1, 0.0)
-            # print(attention_mask.size())
-            # print(attention_scores.size())
+
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -251,8 +250,7 @@ class BottleneckFusion(nn.Module):
         input_out_fusion = output_fusion[:, :t_mod_lang]
         updated_bottleneck_fusion = output_fusion[:, t_mod_lang:]        
         updated_bottleneck_lang = output_lang[:, t_mod_audio:]
-        # del in_mod_fusion, in_mod_lang, out_mod_fusion, out_mod_lang, output_lang, output_fusion
-        # torch.cuda.empty_cache()  
+
 
         return input_out_fusion, updated_bottleneck_fusion, updated_bottleneck_lang
 
@@ -335,12 +333,7 @@ class BertLayer(nn.Module):
 class FCLayer(nn.Module):
     def __init__(self, config):
         super(FCLayer, self).__init__()
-        # self.fc = nn.Linear(349*768, 768) # 349 is the v3, v1 for sims
-        # self.fc = nn.Linear(351*768, 768) # 351 is v2
-        # self.fc = nn.Linear(397*768, 768) # 352 is v1, v3 for mosi mosei
-        # self.fc = nn.Linear(399*768, 768)
-        # self.fc = nn.Linear(200*768, 768)
-        self.fc = nn.Linear(97*768, 768)
+        self.fc = nn.Linear(200*768, 768)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(config.dropout)
     
@@ -375,13 +368,13 @@ class GRU_context(nn.Module):
     def forward(self, inputs):
         # print(self.input_dim)
         output, hidden = self.gru(inputs)
-        # # print(f"the shape of hidden is :{hidden.size()}")
-        # forward_hidden = hidden[-2, :, :]
-        # backward_hidden = hidden[-1, :, :]
-        # concat_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
-        # fc_output_1 = self.fc(concat_hidden)
-        # return fc_output_1
-        return output    
+        # print(f"the shape of hidden is :{hidden.size()}")
+        forward_hidden = hidden[-2, :, :]
+        backward_hidden = hidden[-1, :, :]
+        concat_hidden = torch.cat((forward_hidden, backward_hidden), dim=1)
+        fc_output_1 = self.fc(concat_hidden)
+        return fc_output_1
+        # return output    
     
 class Bottleneck(nn.Module):
     def __init__(self, config):
@@ -488,7 +481,6 @@ class CMELayer(nn.Module):
         lang_output = self.output_fc(
             lang_att_output)
         
-        # print(f"the shape of lang_output is :{lang_output.size()}")
 
         return lang_output
 

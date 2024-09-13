@@ -67,7 +67,6 @@ class QA_Dataset(torch.utils.data.Dataset):
             return_attention_mask=True
         ) for i in indeces]
         text_tokens = torch.stack([torch.tensor(tt["input_ids"]) for tt in tokenized_text]).to(dtype=torch.long)
-        # print(f"the torch shape of text_tokens is {text_tokens.shape}")
         text_masks = torch.stack([torch.tensor(tt["attention_mask"]) for tt in tokenized_text]).to(dtype=torch.long)
         
         audio_features = []
@@ -90,23 +89,18 @@ class QA_Dataset(torch.utils.data.Dataset):
             audio_masks.append(torch.tensor(np.array(features['attention_mask']), dtype=torch.long).squeeze())
         audio_features = torch.stack(audio_features)
         audio_masks = torch.stack(audio_masks)
-        # target = torch.tensor(self.targets[indeces[0]],dtype=torch.long)
-        # target需要包含四张不同的评判标准对应的标签
-        #第一种是正常的五分类不需要变化
-        #第二种是将五分类转换为四分类,四分类：A为一类，B为一类，C为一类，D/E为一类
-        #第三种是将五分类转换为三分类，三分类：A为一类，B/C为一类，D/E为一类
-        #第四种是将五分类转换为二分类，二分类：A/B为一类，CDE为一类
+
         
         target = torch.tensor(self.targets[indeces[0]],dtype=torch.long).unsqueeze(0)
-        # five_class = self.targets[indeces[0]]
-        # class_list = self.convert_label(five_class)
+        five_class = self.targets[indeces[0]]
+        class_list = self.convert_label(five_class)
         
-        # target = {
-        #     "five_class":torch.tensor(class_list[0],dtype=torch.long),
-        #     "four_class":torch.tensor(class_list[1],dtype=torch.long),
-        #     'three_class':torch.tensor(class_list[2],dtype=torch.long),
-        #     "two_class": torch.tensor(class_list[3],dtype=torch.long)
-        # }
+        target = {
+            "five_class":torch.tensor(class_list[0],dtype=torch.long),
+            "four_class":torch.tensor(class_list[1],dtype=torch.long),
+            'three_class':torch.tensor(class_list[2],dtype=torch.long),
+            "two_class": torch.tensor(class_list[3],dtype=torch.long)
+        }
         
         
         if len(indeces) <= threshold:
@@ -1467,43 +1461,21 @@ class Dataset_mosi(torch.utils.data.Dataset):
 
 def data_loader(batch_size):
     
-    # train_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/train.csv'
-    # test_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/test.csv'
-    # verify_label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/verify.csv'
-    
-    label_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosei/moseilabel.csv'
-    
-    # train_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/train_splits_wav'
-    # test_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/output_repeated_splits_test_wav'
-    # verify_file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/MELD/data/dev_splits_complete_wav'
-    
-    file_path = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/mosei/wav'
-    
-    qa_train_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train'
-    qa_test_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_test'
-    qa_verify_file = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_verify'
-    
-    qa_train_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_train.csv'
-    qa_test_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_test.csv'
-    qa_verify_label = '/home/lhy/MM-LLMs/MM-purchase-judgment/MMML/data/qa_new_data/dialog_verify.csv'
-    
-    # train_data = QA_Dataset(qa_train_label, qa_train_file)
-    # test_data = QA_Dataset(qa_test_label, qa_test_file)
-    # val_data = QA_Dataset(qa_verify_label, qa_verify_file)
-    
-    train_data = Dataset_mosi(label_path, file_path, mode='train')
-    test_data = Dataset_mosi(label_path, file_path, mode='test')
-    val_data = Dataset_mosi(label_path, file_path, mode='valid')
-    
-    # train_data = Dataset_sims(label_path, file_path, mode='train')
-    # test_data = Dataset_sims(label_path, file_path, mode='test')
-    # val_data = Dataset_sims(label_path, file_path, mode='valid')
-    
-    # train_data = MELDDataset(train_label_path, train_file_path)
-    # test_data = MELDDataset(test_label_path, test_file_path)
-    # val_data = MELDDataset(verify_label_path, verify_file_path)
     
     
+    qa_train_file = ''
+    qa_test_file = ''
+    qa_verify_file = ''
+    
+    qa_train_label = ''
+    qa_test_label = ''
+    qa_verify_label = ''
+    
+    train_data = QA_Dataset(qa_train_label, qa_train_file)
+    test_data = QA_Dataset(qa_test_label, qa_test_file)
+    val_data = QA_Dataset(qa_verify_label, qa_verify_file)
+    
+
     
     
     train_loader = DataLoader(

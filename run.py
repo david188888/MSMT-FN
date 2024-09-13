@@ -1,13 +1,5 @@
 import argparse
 from utils.ch_train import ChConfig, ChRun
-import nni
-import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-# os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-
-
-from setuptools import setup
-import setuptools.command.install
 
 def strtobool(val):
     val = val.lower()
@@ -25,8 +17,6 @@ def main(args):
               num_layers_gru=args['num_layers_gru'],epochs=args['epochs'], use_regularization=(args['use_regularization']), dropout=args['dropout']))
 
 if __name__ == "__main__":
-    try:
-        tuner_params = nni.get_next_parameter() 
         parser = argparse.ArgumentParser()
         parser.add_argument('--seed', type=int, default=42, help='random seed')
         parser.add_argument('--batch_size', type=int, default=1, help='batch size')
@@ -43,12 +33,7 @@ if __name__ == "__main__":
         parser.add_argument('--dropout', type=float, default=0.3, help='dropout rate')
         args = parser.parse_args()
         params = vars(args)
-        params.update(tuner_params)
         main(params)
-    except Exception as exception:
-        nni.report_final_result(exception)
-        raise
-
 
 
 

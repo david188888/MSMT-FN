@@ -25,9 +25,7 @@ class MetricsTop():
     
     
     def __meld_classification(self, y_pred, y_true):
-        '''
-        计算meld数据集的分类准确率, 先计算七分类准确率，再计算每个类别的准确率，最后计算加权F1分数
-        '''
+        
         
         y_pred = y_pred.cpu().detach().numpy()
         y_true = y_true.cpu().detach().numpy()
@@ -57,9 +55,7 @@ class MetricsTop():
     
     
     def qa_data_classification(self, y_pred, y_true):
-        '''
-        计算qa数据集的分类准确率
-        '''
+
         
         y_pred = y_pred.cpu().detach().numpy()
         y_true = y_true.cpu().detach().numpy()
@@ -69,10 +65,9 @@ class MetricsTop():
         
         
         
-        # 计算五分类准确率
         Mult_acc_5 = self.__multiclass_acc(y_pred, y_true)
         
-        # 计算四分类准确率，0为一类，1为一类，2为一类，3，4为一类
+ 
         y_pred_4 = y_pred.copy()
         y_true_4 = y_true.copy()
         
@@ -85,7 +80,7 @@ class MetricsTop():
         
         Mult_acc_4 = self.__multiclass_acc(y_pred_4, y_true_4)
         
-        # 计算三分类准确率 0为一类，1，2为一类，3，4为一类
+
         y_pred_3 = y_pred.copy()
         y_true_3 = y_true.copy()
         
@@ -103,8 +98,7 @@ class MetricsTop():
         
         Mult_acc_3 = self.__multiclass_acc(y_pred_3, y_true_3)
         
-        
-        # 计算二分类准确率 0，1为一类，2，3，4为一类
+
         y_pred_2 = y_pred.copy()
         y_true_2 = y_true.copy()
         
@@ -143,38 +137,12 @@ class MetricsTop():
         test_truth_label = test_truth.flatten()
         
         
-        # 计算mosei三分类准确率
-        Mult_acc_2 = accuracy_score(y_pred=test_preds_label, y_true=test_truth_label)
-        # 计算 mosei 三分类F1 分数
-        f_score = f1_score(y_pred=test_preds_label,y_true=test_truth_label, average='weighted')
-        
-        # #计算mosei 二分类准确率, 中性或者不是中性
-        # y_pred_binary = np.array([[v[0], v[2]] for v in test_preds])
-        # y_pred_2 = np.argmax(y_pred_binary, axis=1)
-        # y_true_2 = []
-        # for v in test_truth:
-        #     if v <= 1:
-        #         y_true_2.append(0)
-        #     else:
-        #         y_true_2.append(1)
-        # y_true_2 = np.array(y_true_2)
-        # Has0_acc_2 = accuracy_score(y_true_2, y_pred_2)
-        # Has0_F1_score = f1_score(y_true_2, y_pred_2, average='weighted')
-        
-        # # mosi 的正或者负
-        # non_zeros = np.array([i for i, e in enumerate(test_truth) if e != 1])
 
-        # y_pred_2 = test_preds[non_zeros]
-        # y_pred_2 = np.argmax(y_pred_2, axis=1)
-        # y_true_2 = test_truth[non_zeros]
-        # Non0_acc_2 = accuracy_score(y_pred_2, y_true_2)
-        # Non0_F1_score = f1_score(y_true_2, y_pred_2, average='weighted')
-        
+        Mult_acc_2 = accuracy_score(y_pred=test_preds_label, y_true=test_truth_label)
+
+        f_score = f1_score(y_pred=test_preds_label,y_true=test_truth_label, average='weighted')
+
         eval_results = {
-            # "Has0_acc_2":  round(Has0_acc_2, 4),
-            # "Has0_F1_score": round(Has0_F1_score, 4),
-            # "Non0_acc_2":  round(Non0_acc_2, 4),
-            # "Non0_F1_score": round(Non0_F1_score, 4),
             "Mult_acc_2": round(Mult_acc_2, 4),
             "F1_score": round(f_score, 4)
         }
@@ -283,19 +251,10 @@ class MetricsTop():
         test_truth = y_true.cpu().detach().numpy()
 
         
-        test_preds_label = np.argmax(test_preds, axis=1)
-        test_truth_label = test_truth.flatten()
-        
-        # print(f"test_preds: {test_preds[:5]}")
-    
-        
-        # eval_results = {
-        #     "Acc": round(accuracy_score(y_pred=test_preds_label, y_true=test_truth_label), 4),
-        #     "F1": round(f1_score(y_pred=test_preds_label, y_true=test_truth_label, average='weighted'), 4)
-        # }   
-        # eval_results = self.qa_data_classification(y_pred, y_true)
+
+        eval_results = self.qa_data_classification(y_pred, y_true)
         # eval_results = self.__mosi_classification(y_pred, y_true)
-        eval_results = self.__eval_mosei_regression(y_pred, y_true)
+        # eval_results = self.__eval_mosei_regression(y_pred, y_true)
         # eval_results = self.__eval_sims_regression(y_pred, y_true)
         # eval_results = self.__meld_classification(y_pred, y_true)
         return eval_results
