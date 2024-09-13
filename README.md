@@ -15,6 +15,13 @@ python run.py
 optional arguments:
     --lr : learning rate
     --seed: random seed
+    --dropout: dropout rate
+    --hidden_size_gru: hidden size of GRU
+    --bottleneck_layers : bottleneck layers
+    --n_bottlenecks : number of bottleneck layers
+    --accumulation_steps : accumulation steps
+    --scheduler : scheduler ,'scheduler: fixed, cosineAnnealingLR'
+    --num_hidden_layers : number of hidden layers of CME
 ```
 
 
