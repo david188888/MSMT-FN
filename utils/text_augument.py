@@ -17,9 +17,11 @@ for index, row in multi_tone_df.iterrows():
     pinyin_dict[pinyin].append(word)
 
 # 定义一个替换函数
+
+
 def replace_with_similar_pinyin(text, pinyin_dict, replace_prob=0.5):
     words = list(text)
-    skip_words = ['客','服','顾']
+    skip_words = ['客', '服', '顾']
     for i, word in enumerate(words):
         if word in skip_words:
             continue
@@ -28,7 +30,6 @@ def replace_with_similar_pinyin(text, pinyin_dict, replace_prob=0.5):
                 words[i] = random.choice(chars)
                 break
     return ''.join(words)
-
 
 
 # 定义多线程处理函数
@@ -48,15 +49,17 @@ num_threads = 4  # 设置线程数
 
 for _ in tqdm(range(num_iterations), desc="Iterations"):
     source_df = pd.read_csv('')
-    
+
     # 将数据分割成多片进行处理
     chunks = [source_df['text'][i::num_threads] for i in range(num_threads)]
-    
+
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        results = list(tqdm(executor.map(lambda chunk: process_chunk(chunk, pinyin_dict, replace_prob), chunks), total=num_threads, desc="Processing Chunks"))
-    
+        results = list(tqdm(executor.map(lambda chunk: process_chunk(
+            chunk, pinyin_dict, replace_prob), chunks), total=num_threads, desc="Processing Chunks"))
+
     # 合并处理结果
     source_df['text'] = pd.concat(results).sort_index().values
-    pd.concat([target_df, source_df], ignore_index=True).to_csv('', index=False)
+    pd.concat([target_df, source_df],
+              ignore_index=True).to_csv('', index=False)
 
 print("处理完成并保存到目标文件。")
