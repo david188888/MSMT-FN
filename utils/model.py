@@ -4,7 +4,6 @@ from transformers import RobertaModel, HubertModel, AutoModel, Data2VecAudioMode
 from utils.module import CMELayer, AttnConfig, GRU_context, GruConfig, Bottleneck, FCLayer, TextAttention
 import gc
 import os
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
